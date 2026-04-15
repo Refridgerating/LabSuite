@@ -142,6 +142,61 @@ def test_local_integration_with_curves_populates_only_selected_window() -> None:
     assert curves.area_signal[np.flatnonzero(inside_window)[-1]] == pytest.approx(integral.area_integral)
 
 
+def test_local_integration_excludes_other_component_windows_from_baseline() -> None:
+    field = np.linspace(80.0, 140.0, 8001)
+    primary_signal = derivative_lorentzian(field, amplitude=1.2, center_mT=100.0, gamma_mT=0.6, offset=0.0)
+    secondary_signal = derivative_lorentzian(field, amplitude=0.8, center_mT=112.0, gamma_mT=0.6, offset=0.0)
+    recipe = EsrPreprocessingRecipe()
+    peak_1_window = PeakWindow(
+        label="peak_1",
+        start_index=2000,
+        end_index=3400,
+        start_field_mT=95.0,
+        end_field_mT=105.5,
+        peak_index=2400,
+        trough_index=3000,
+        peak_field_mT=98.0,
+        trough_field_mT=102.5,
+        width_mT=4.5,
+        prominence=1.0,
+    )
+    peak_2_window = PeakWindow(
+        label="peak_2",
+        start_index=3800,
+        end_index=5000,
+        start_field_mT=108.5,
+        end_field_mT=115.5,
+        peak_index=4100,
+        trough_index=4700,
+        peak_field_mT=110.75,
+        trough_field_mT=114.25,
+        width_mT=3.5,
+        prominence=0.8,
+    )
+
+    reference = integrate_local_resonance(
+        ProcessedTrace(field_mT=field, signal=np.asarray(primary_signal, dtype=float)),
+        recipe,
+        label="peak_1",
+        center_mT=100.0,
+        gamma_mT=0.6,
+        peak_window=peak_1_window,
+    )
+    isolated = integrate_local_resonance(
+        ProcessedTrace(field_mT=field, signal=np.asarray(primary_signal + secondary_signal, dtype=float)),
+        recipe,
+        label="peak_1",
+        center_mT=100.0,
+        gamma_mT=0.6,
+        peak_window=peak_1_window,
+        exclude_windows=[peak_1_window, peak_2_window],
+    )
+
+    assert reference.area_integral is not None
+    assert isolated.area_integral is not None
+    assert isolated.area_integral == pytest.approx(reference.area_integral, rel=0.08)
+
+
 def _integrate_trace(
     *,
     field_start: float,

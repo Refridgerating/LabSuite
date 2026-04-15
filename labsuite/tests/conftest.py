@@ -27,11 +27,14 @@ def write_bruker_esr_sample():
         center_mT: float = 340.0,
         gamma_mT: float = 1.2,
         components: list[dict[str, float]] | None = None,
+        field_start_mT: float = 330.0,
+        field_end_mT: float = 350.0,
+        point_count: int = 401,
     ) -> Path:
         descriptor_path = path if path.suffix.lower() == ".dsc" else path.with_suffix(".dsc")
         data_path = descriptor_path.with_suffix(".DTA")
 
-        field_mT = np.linspace(330.0, 350.0, 401)
+        field_mT = np.linspace(field_start_mT, field_end_mT, point_count)
         component_list = components or [
             {
                 "amplitude": 1.3,
@@ -98,3 +101,11 @@ def bruker_sample_stem(bruker_raw_dir: Path) -> Path:
     if not matches:
         pytest.skip("No Bruker .dsc file available in data/raw for acceptance testing.")
     return matches[0].with_suffix("")
+
+
+@pytest.fixture
+def vsm_sample_files(project_root: Path) -> list[Path]:
+    matches = sorted((project_root / "data" / "raw").glob("MTJ-B-*.dat"))
+    if not matches:
+        pytest.skip("No VSM .dat files available in data/raw for acceptance testing.")
+    return matches

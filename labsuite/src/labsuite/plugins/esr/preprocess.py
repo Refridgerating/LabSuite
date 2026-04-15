@@ -141,6 +141,7 @@ def integrate_local_resonance(
     center_mT: float,
     gamma_mT: float,
     peak_window: PeakWindow | None = None,
+    exclude_windows: list[PeakWindow] | None = None,
 ) -> IntegralSummary:
     """Compute a resonance-local integral from off-resonance baseline data only."""
 
@@ -151,6 +152,7 @@ def integrate_local_resonance(
         center_mT=center_mT,
         gamma_mT=gamma_mT,
         peak_window=peak_window,
+        exclude_windows=exclude_windows,
     )
     return summary
 
@@ -163,6 +165,7 @@ def integrate_local_resonance_with_curves(
     center_mT: float,
     gamma_mT: float,
     peak_window: PeakWindow | None = None,
+    exclude_windows: list[PeakWindow] | None = None,
 ) -> tuple[IntegralSummary, PrimaryIntegratedCurves | None]:
     """Compute resonance-local scalar integrals and full-axis local curves."""
 
@@ -179,25 +182,13 @@ def integrate_local_resonance_with_curves(
             None,
         )
 
-    integration_half_width = max(
-        recipe.integration_window_gamma_multiplier * abs(float(gamma_mT)),
-        recipe.integration_window_min_half_width_mT,
+    start_field, end_field, clipped_by_detected_window = _local_integration_bounds(
+        field=field,
+        recipe=recipe,
+        center_mT=center_mT,
+        gamma_mT=gamma_mT,
+        peak_window=peak_window,
     )
-    baseline_half_width = max(
-        recipe.integration_baseline_window_gamma_multiplier * abs(float(gamma_mT)),
-        recipe.integration_baseline_window_min_half_width_mT,
-    )
-
-    start_field = max(float(field[0]), float(center_mT - integration_half_width))
-    end_field = min(float(field[-1]), float(center_mT + integration_half_width))
-    clipped_by_detected_window = False
-    if peak_window is not None:
-        guard_start, guard_end = _detected_window_guard_bounds(peak_window, recipe)
-        clipped_start = max(start_field, guard_start)
-        clipped_end = min(end_field, guard_end)
-        clipped_by_detected_window = clipped_start > start_field or clipped_end < end_field
-        start_field = clipped_start
-        end_field = clipped_end
     integration_mask = (field >= start_field) & (field <= end_field)
     if int(np.count_nonzero(integration_mask)) < 2:
         return (
@@ -210,21 +201,51 @@ def integrate_local_resonance_with_curves(
             None,
         )
 
-    baseline_start = center_mT - baseline_half_width
-    baseline_end = center_mT + baseline_half_width
-    if peak_window is not None:
-        guard_start, guard_end = _detected_window_guard_bounds(peak_window, recipe)
-        baseline_start = max(baseline_start, guard_start)
-        baseline_end = min(baseline_end, guard_end)
+    local_diagnostic_reason = evaluate_local_resonance_diagnostic_reason(
+        trace,
+        recipe,
+        center_mT=center_mT,
+        gamma_mT=gamma_mT,
+        peak_window=peak_window,
+        exclude_windows=exclude_windows,
+    )
+    if local_diagnostic_reason is not None:
+        return (
+            _unavailable_integral_summary(
+                label,
+                start_field,
+                end_field,
+                clipped_by_detected_window=clipped_by_detected_window,
+            ),
+            None,
+        )
+
+    baseline_start, baseline_end = _local_baseline_region_bounds(
+        field=field,
+        recipe=recipe,
+        center_mT=center_mT,
+        gamma_mT=gamma_mT,
+        peak_window=peak_window,
+    )
+    excluded_mask = _excluded_window_mask(
+        field=field,
+        exclude_windows=exclude_windows,
+        current_window=peak_window,
+    )
     baseline_mask = _local_baseline_mask(
         field=field,
         region_start=baseline_start,
         region_end=baseline_end,
         integration_mask=integration_mask,
+        excluded_mask=excluded_mask,
     )
     required_points = max(20, 2 * (recipe.integration_baseline_polyorder + 1))
     actual_polyorder = recipe.integration_baseline_polyorder
     if int(np.count_nonzero(baseline_mask)) < required_points and peak_window is not None:
+        baseline_half_width = max(
+            recipe.integration_baseline_window_gamma_multiplier * abs(float(gamma_mT)),
+            recipe.integration_baseline_window_min_half_width_mT,
+        )
         expanded_start = max(float(field[0]), float(peak_window.start_field_mT - baseline_half_width))
         expanded_end = min(float(field[-1]), float(peak_window.end_field_mT + baseline_half_width))
         baseline_mask = _local_baseline_mask(
@@ -232,6 +253,7 @@ def integrate_local_resonance_with_curves(
             region_start=expanded_start,
             region_end=expanded_end,
             integration_mask=integration_mask,
+            excluded_mask=excluded_mask,
         )
     if int(np.count_nonzero(baseline_mask)) < required_points:
         actual_polyorder = 0
@@ -278,15 +300,83 @@ def integrate_local_resonance_with_curves(
     return summary, curves
 
 
+def evaluate_local_resonance_diagnostic_reason(
+    trace: ProcessedTrace,
+    recipe: EsrPreprocessingRecipe,
+    *,
+    center_mT: float,
+    gamma_mT: float,
+    peak_window: PeakWindow | None = None,
+    exclude_windows: list[PeakWindow] | None = None,
+) -> str | None:
+    """Return a suppression reason when a split local diagnostic is not isolated."""
+
+    field = trace.field_mT
+    if peak_window is None or not exclude_windows or field.size < 2:
+        return None
+
+    start_field, end_field, _clipped = _local_integration_bounds(
+        field=field,
+        recipe=recipe,
+        center_mT=center_mT,
+        gamma_mT=gamma_mT,
+        peak_window=peak_window,
+    )
+    integration_mask = (field >= start_field) & (field <= end_field)
+    if int(np.count_nonzero(integration_mask)) < 2:
+        return "integration_window_too_small"
+
+    overlap_labels = sorted(
+        window.label
+        for window in exclude_windows
+        if window.label != peak_window.label
+        and not (end_field < window.start_field_mT or start_field > window.end_field_mT)
+    )
+    reasons: list[str] = []
+    if overlap_labels:
+        reasons.append(f"overlaps_detected_resonance:{','.join(overlap_labels)}")
+
+    baseline_start, baseline_end = _local_baseline_region_bounds(
+        field=field,
+        recipe=recipe,
+        center_mT=center_mT,
+        gamma_mT=gamma_mT,
+        peak_window=peak_window,
+    )
+    baseline_mask = _local_baseline_mask(
+        field=field,
+        region_start=baseline_start,
+        region_end=baseline_end,
+        integration_mask=integration_mask,
+        excluded_mask=_excluded_window_mask(
+            field=field,
+            exclude_windows=exclude_windows,
+            current_window=peak_window,
+        ),
+    )
+    left_baseline_points = int(np.count_nonzero(baseline_mask & (field < start_field)))
+    right_baseline_points = int(np.count_nonzero(baseline_mask & (field > end_field)))
+    touches_left_edge = start_field <= float(field[0]) + 1e-12
+    touches_right_edge = end_field >= float(field[-1]) - 1e-12
+    if (touches_left_edge or touches_right_edge) and (left_baseline_points == 0 or right_baseline_points == 0):
+        reasons.append("boundary_truncated_baseline")
+
+    return None if not reasons else ";".join(reasons)
+
+
 def _local_baseline_mask(
     *,
     field: np.ndarray,
     region_start: float,
     region_end: float,
     integration_mask: np.ndarray,
+    excluded_mask: np.ndarray | None = None,
 ) -> np.ndarray:
     region_mask = (field >= region_start) & (field <= region_end)
-    return region_mask & ~integration_mask
+    mask = region_mask & ~integration_mask
+    if excluded_mask is not None:
+        mask = mask & ~excluded_mask
+    return mask
 
 
 def _fit_local_baseline(
@@ -327,6 +417,69 @@ def _build_primary_local_curves(
         baseline_polyorder=summary.baseline_polyorder,
         integration_window_clipped_by_detected_window=summary.integration_window_clipped_by_detected_window,
     )
+
+
+def _local_integration_bounds(
+    *,
+    field: np.ndarray,
+    recipe: EsrPreprocessingRecipe,
+    center_mT: float,
+    gamma_mT: float,
+    peak_window: PeakWindow | None,
+) -> tuple[float, float, bool]:
+    integration_half_width = max(
+        recipe.integration_window_gamma_multiplier * abs(float(gamma_mT)),
+        recipe.integration_window_min_half_width_mT,
+    )
+    start_field = max(float(field[0]), float(center_mT - integration_half_width))
+    end_field = min(float(field[-1]), float(center_mT + integration_half_width))
+    clipped_by_detected_window = False
+    if peak_window is not None:
+        guard_start, guard_end = _detected_window_guard_bounds(peak_window, recipe)
+        clipped_start = max(start_field, guard_start)
+        clipped_end = min(end_field, guard_end)
+        clipped_by_detected_window = clipped_start > start_field or clipped_end < end_field
+        start_field = clipped_start
+        end_field = clipped_end
+    return start_field, end_field, clipped_by_detected_window
+
+
+def _local_baseline_region_bounds(
+    *,
+    field: np.ndarray,
+    recipe: EsrPreprocessingRecipe,
+    center_mT: float,
+    gamma_mT: float,
+    peak_window: PeakWindow | None,
+) -> tuple[float, float]:
+    baseline_half_width = max(
+        recipe.integration_baseline_window_gamma_multiplier * abs(float(gamma_mT)),
+        recipe.integration_baseline_window_min_half_width_mT,
+    )
+    baseline_start = center_mT - baseline_half_width
+    baseline_end = center_mT + baseline_half_width
+    if peak_window is not None:
+        guard_start, guard_end = _detected_window_guard_bounds(peak_window, recipe)
+        baseline_start = max(baseline_start, guard_start)
+        baseline_end = min(baseline_end, guard_end)
+    return max(float(field[0]), float(baseline_start)), min(float(field[-1]), float(baseline_end))
+
+
+def _excluded_window_mask(
+    *,
+    field: np.ndarray,
+    exclude_windows: list[PeakWindow] | None,
+    current_window: PeakWindow | None,
+) -> np.ndarray | None:
+    if not exclude_windows:
+        return None
+    mask = np.zeros_like(field, dtype=bool)
+    current_label = None if current_window is None else current_window.label
+    for window in exclude_windows:
+        if current_label is not None and window.label == current_label:
+            continue
+        mask |= (field >= window.start_field_mT) & (field <= window.end_field_mT)
+    return mask
 
 
 def _detected_window_guard_bounds(

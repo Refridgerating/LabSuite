@@ -42,6 +42,32 @@ class EsrPreprocessingRecipe:
         return asdict(self)
 
 
+@dataclass(slots=True)
+class VsmPreprocessingRecipe:
+    """Recipe for the first VSM loop-processing path."""
+
+    name: str = "vsm-default"
+    background_tail_fraction: float = 0.12
+    background_min_points_per_side: int = 24
+    background_tail_flatness_ratio_tolerance: float = 0.08
+    background_slope_disagreement_ratio_tolerance: float = 0.35
+    center_loop: bool = False
+    smoothing_enabled: bool = False
+    smoothing_window: int = 0
+    smoothing_polyorder: int = 0
+    uncertainty_scale: float = 1.0
+    uncertainty_zero_field_window_width_mT: float = 5.0
+    uncertainty_zero_field_min_points: int = 5
+    uncertainty_switching_half_width_mT: float = 3.0
+    uncertainty_switching_min_points: int = 4
+    uncertainty_loop_area_smoothing_window: int = 9
+    uncertainty_loop_area_smoothing_polyorder: int = 2
+    uncertainty_min_switching_slope_emu_per_mT: float = 1e-7
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+
 def load_esr_recipe(path: Path) -> EsrPreprocessingRecipe:
     """Load the ESR preprocessing recipe from YAML or a simple fallback mapping."""
 
@@ -79,6 +105,39 @@ def load_esr_recipe(path: Path) -> EsrPreprocessingRecipe:
         fit_local_disagreement_ratio_threshold=float(payload.get("fit_local_disagreement_ratio_threshold", 0.35)),
     )
     _validate_recipe(recipe)
+    return recipe
+
+
+def load_vsm_recipe(path: Path) -> VsmPreprocessingRecipe:
+    """Load the VSM preprocessing recipe from YAML or a simple fallback mapping."""
+
+    payload = _load_mapping(path)
+    recipe = VsmPreprocessingRecipe(
+        name=str(payload.get("name", "vsm-default")),
+        background_tail_fraction=float(payload.get("background_tail_fraction", 0.12)),
+        background_min_points_per_side=int(payload.get("background_min_points_per_side", 24)),
+        background_tail_flatness_ratio_tolerance=float(
+            payload.get("background_tail_flatness_ratio_tolerance", 0.08)
+        ),
+        background_slope_disagreement_ratio_tolerance=float(
+            payload.get("background_slope_disagreement_ratio_tolerance", 0.35)
+        ),
+        center_loop=bool(payload.get("center_loop", False)),
+        smoothing_enabled=bool(payload.get("smoothing_enabled", False)),
+        smoothing_window=int(payload.get("smoothing_window", 0)),
+        smoothing_polyorder=int(payload.get("smoothing_polyorder", 0)),
+        uncertainty_scale=float(payload.get("uncertainty_scale", 1.0)),
+        uncertainty_zero_field_window_width_mT=float(payload.get("uncertainty_zero_field_window_width_mT", 5.0)),
+        uncertainty_zero_field_min_points=int(payload.get("uncertainty_zero_field_min_points", 5)),
+        uncertainty_switching_half_width_mT=float(payload.get("uncertainty_switching_half_width_mT", 3.0)),
+        uncertainty_switching_min_points=int(payload.get("uncertainty_switching_min_points", 4)),
+        uncertainty_loop_area_smoothing_window=int(payload.get("uncertainty_loop_area_smoothing_window", 9)),
+        uncertainty_loop_area_smoothing_polyorder=int(payload.get("uncertainty_loop_area_smoothing_polyorder", 2)),
+        uncertainty_min_switching_slope_emu_per_mT=float(
+            payload.get("uncertainty_min_switching_slope_emu_per_mT", 1e-7)
+        ),
+    )
+    _validate_vsm_recipe(recipe)
     return recipe
 
 
@@ -165,3 +224,43 @@ def _validate_recipe(recipe: EsrPreprocessingRecipe) -> None:
         raise RecipeError("fit_max_gamma_as_sweep_fraction must be between 0 and 1")
     if recipe.fit_local_disagreement_ratio_threshold <= 0.0:
         raise RecipeError("fit_local_disagreement_ratio_threshold must be positive")
+
+
+def _validate_vsm_recipe(recipe: VsmPreprocessingRecipe) -> None:
+    if not 0.0 < recipe.background_tail_fraction < 0.5:
+        raise RecipeError("background_tail_fraction must be between 0 and 0.5")
+    if recipe.background_min_points_per_side < 2:
+        raise RecipeError("background_min_points_per_side must be at least 2")
+    if recipe.background_tail_flatness_ratio_tolerance <= 0.0:
+        raise RecipeError("background_tail_flatness_ratio_tolerance must be positive")
+    if recipe.background_slope_disagreement_ratio_tolerance <= 0.0:
+        raise RecipeError("background_slope_disagreement_ratio_tolerance must be positive")
+    if recipe.smoothing_window < 0:
+        raise RecipeError("smoothing_window must be zero or positive")
+    if recipe.smoothing_polyorder < 0:
+        raise RecipeError("smoothing_polyorder must be zero or positive")
+    if recipe.smoothing_enabled:
+        if recipe.smoothing_window < 3:
+            raise RecipeError("smoothing_window must be at least 3 when smoothing_enabled is true")
+        if recipe.smoothing_polyorder >= recipe.smoothing_window:
+            raise RecipeError("smoothing_polyorder must be smaller than smoothing_window")
+    if recipe.uncertainty_scale <= 0.0:
+        raise RecipeError("uncertainty_scale must be positive")
+    if recipe.uncertainty_zero_field_window_width_mT <= 0.0:
+        raise RecipeError("uncertainty_zero_field_window_width_mT must be positive")
+    if recipe.uncertainty_zero_field_min_points < 2:
+        raise RecipeError("uncertainty_zero_field_min_points must be at least 2")
+    if recipe.uncertainty_switching_half_width_mT <= 0.0:
+        raise RecipeError("uncertainty_switching_half_width_mT must be positive")
+    if recipe.uncertainty_switching_min_points < 2:
+        raise RecipeError("uncertainty_switching_min_points must be at least 2")
+    if recipe.uncertainty_loop_area_smoothing_window < 3:
+        raise RecipeError("uncertainty_loop_area_smoothing_window must be at least 3")
+    if recipe.uncertainty_loop_area_smoothing_polyorder < 1:
+        raise RecipeError("uncertainty_loop_area_smoothing_polyorder must be at least 1")
+    if recipe.uncertainty_loop_area_smoothing_polyorder >= recipe.uncertainty_loop_area_smoothing_window:
+        raise RecipeError(
+            "uncertainty_loop_area_smoothing_polyorder must be smaller than uncertainty_loop_area_smoothing_window"
+        )
+    if recipe.uncertainty_min_switching_slope_emu_per_mT <= 0.0:
+        raise RecipeError("uncertainty_min_switching_slope_emu_per_mT must be positive")

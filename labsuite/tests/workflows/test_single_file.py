@@ -135,6 +135,45 @@ def test_esr_single_file_cli_forced_split_exports_components(tmp_path, project_r
     assert "fit_scope" in summary_header
 
 
+def test_esr_single_file_cli_exports_split_local_suppression_reason(tmp_path, project_root, write_bruker_esr_sample) -> None:
+    source_file = write_bruker_esr_sample(
+        tmp_path / "edge_split_trace.dsc",
+        components=[
+            {"amplitude": 1.15, "center_mT": 335.0, "gamma_mT": 0.95, "offset": 0.0},
+            {"amplitude": 0.9, "center_mT": 348.1, "gamma_mT": 1.35, "offset": 0.0},
+        ],
+    )
+    output_dir = tmp_path / "edge_split_artifacts"
+    recipe_path = project_root / "recipes" / "esr" / "default.yaml"
+
+    exit_code = main(
+        [
+            "esr-single",
+            str(source_file),
+            "--recipe",
+            str(recipe_path),
+            "--output-dir",
+            str(output_dir),
+            "--fit-mode",
+            "split",
+        ]
+    )
+
+    assert exit_code == 0
+    payload = json.loads((output_dir / "edge_split_trace_analysis.json").read_text(encoding="utf-8"))
+    assert payload["fit_selection"]["selected_mode"] == "split"
+    assert payload["fit_local_integrated_curves"] is None
+    assert payload["local_integrated_curves"] is None
+    assert payload["integral_summaries"]["fit_local_total"]["area_integral"] is None
+    assert payload["integral_summaries"]["local_total"]["area_integral"] is None
+    assert payload["qc"]["fit_local_disagreement_reason"] is not None
+    assert "split_local_diagnostic_unavailable" in payload["qc"]["fit_local_disagreement_reason"]
+    assert any(
+        peak["fit"]["derived"].get("local_diagnostic_reason") is not None
+        for peak in payload["fit_selection"]["peak_fits"]
+    )
+
+
 def test_esr_single_file_cli_runs_on_actual_bruker_dataset(tmp_path, project_root, bruker_sample_stem) -> None:
     output_dir = tmp_path / "bruker_artifacts"
     recipe_path = project_root / "recipes" / "esr" / "default.yaml"

@@ -2,11 +2,21 @@
 
 from __future__ import annotations
 
+import re
+import textwrap
 from pathlib import Path
 
 import matplotlib.pyplot as plt
+from matplotlib.font_manager import FontProperties
+from matplotlib.text import Text
 
 from labsuite.core.types import AnalysisResult, FitResult, PeakFitResult
+
+
+_SUMMARY_FONT_SIZE = 8
+_SUMMARY_FONT_FAMILY = "monospace"
+_PLUS_MINUS = "\u00b1"
+_DELTA = "\u0394"
 
 
 def export_analysis_figure(
@@ -24,6 +34,9 @@ def export_analysis_figure(
         sharex=True,
         constrained_layout=True,
     )
+    layout_engine = figure.get_layout_engine()
+    if layout_engine is not None:
+        layout_engine.set(hspace=0.22, h_pad=0.2)
 
     axes[0].plot(result.dataset.field_mT, result.dataset.signal, color="0.25", linewidth=1.25)
     axes[0].set_title("Raw ESR Trace")
@@ -70,18 +83,8 @@ def export_analysis_figure(
     axes[1].set_title(f"Processed Derivative and Selected Fit ({result.selected_mode})")
     axes[1].set_ylabel("Derivative signal")
     axes[1].grid(alpha=0.2)
-    axes[1].legend(loc="upper left")
-    axes[1].text(
-        0.99,
-        0.02,
-        _build_summary_text(result),
-        transform=axes[1].transAxes,
-        ha="right",
-        va="bottom",
-        fontsize=8,
-        family="monospace",
-        bbox={"boxstyle": "round,pad=0.35", "facecolor": "white", "alpha": 0.85, "edgecolor": "0.75"},
-    )
+    _place_axis_legend_below(axes[1], ncols=2, y_offset=-0.16)
+    _place_axis_footer_text_below(axes[1], _build_summary_text(result), y_offset=-0.52)
 
     plotted_curves, absorption_title, area_title = _plotted_integrated_curves(result)
     for series in _integrated_curve_series(result):
@@ -97,7 +100,7 @@ def export_analysis_figure(
     axes[2].set_title(absorption_title)
     axes[2].set_ylabel("Absorption")
     axes[2].grid(alpha=0.2)
-    axes[2].legend(loc="upper right")
+    _place_axis_legend_below(axes[2], ncols=1, y_offset=-0.18)
 
     for series in _integrated_curve_series(result):
         axes[3].plot(
@@ -113,7 +116,7 @@ def export_analysis_figure(
     axes[3].set_xlabel("Field (mT)")
     axes[3].set_ylabel("Area")
     axes[3].grid(alpha=0.2)
-    axes[3].legend(loc="upper right")
+    _place_axis_legend_below(axes[3], ncols=1, y_offset=-0.24)
 
     figure.savefig(destination, dpi=200)
     if show:
@@ -128,6 +131,101 @@ def _selected_fit_for_annotation(result: AnalysisResult) -> FitResult | None:
     return result.peak_fits[0].fit if result.peak_fits else None
 
 
+def _place_axis_legend_below(axis, *, ncols: int = 1, y_offset: float = -0.18):
+    legend = axis.legend(
+        loc="upper center",
+        bbox_to_anchor=(0.5, y_offset),
+        ncols=ncols,
+        frameon=True,
+        borderaxespad=0.0,
+    )
+    legend.set_in_layout(True)
+    return legend
+
+
+def _place_axis_footer_text_below(axis, text: str, *, y_offset: float) -> None:
+    axis.figure.canvas.draw()
+    renderer = axis.figure.canvas.get_renderer()
+    wrapped_text = _wrap_footer_text_to_axis_width(
+        axis,
+        text,
+        renderer,
+        fontsize=_SUMMARY_FONT_SIZE,
+        family=_SUMMARY_FONT_FAMILY,
+    )
+    footer = axis.text(
+        0.5,
+        y_offset,
+        wrapped_text,
+        transform=axis.transAxes,
+        ha="center",
+        va="top",
+        fontsize=_SUMMARY_FONT_SIZE,
+        family=_SUMMARY_FONT_FAMILY,
+        clip_on=False,
+        bbox={"boxstyle": "round,pad=0.35", "facecolor": "white", "alpha": 0.85, "edgecolor": "0.75"},
+    )
+    footer.set_in_layout(True)
+
+
+def _wrap_footer_text_to_axis_width(axis, text: str, renderer, *, fontsize: float, family: str) -> str:
+    axis_width_px = axis.get_window_extent(renderer=renderer).width
+    max_text_width_px = max(axis_width_px - 24.0, 160.0)
+    font_properties = FontProperties(family=family, size=fontsize)
+    char_width_px = _measure_text_block_width(axis.figure, "M" * 40, renderer, font_properties) / 40.0
+    max_chars = max(28, int(max_text_width_px / max(char_width_px, 1.0)))
+    wrapped_text = _wrap_footer_lines(text, width=max_chars)
+    while max_chars > 28:
+        wrapped_width = _measure_text_block_width(axis.figure, wrapped_text, renderer, font_properties)
+        if wrapped_width <= max_text_width_px:
+            break
+        max_chars -= 2
+        wrapped_text = _wrap_footer_lines(text, width=max_chars)
+    return wrapped_text
+
+
+def _measure_text_block_width(figure, text: str, renderer, font_properties: FontProperties) -> float:
+    probe = Text(0.0, 0.0, text, fontproperties=font_properties)
+    probe.set_figure(figure)
+    return probe.get_window_extent(renderer=renderer).width
+
+
+def _wrap_footer_lines(text: str, *, width: int) -> str:
+    wrapped_lines: list[str] = []
+    for raw_line in text.splitlines():
+        if not raw_line:
+            wrapped_lines.append("")
+            continue
+        stripped = raw_line.lstrip()
+        indent = raw_line[: len(raw_line) - len(stripped)]
+        if ": " in stripped:
+            prefix, remainder = stripped.split(": ", 1)
+            wrapped_lines.extend(
+                textwrap.wrap(
+                    remainder,
+                    width=max(width, 16),
+                    initial_indent=f"{indent}{prefix}: ",
+                    subsequent_indent=" " * (len(indent) + len(prefix) + 2),
+                    break_long_words=False,
+                    break_on_hyphens=False,
+                )
+                or [f"{indent}{prefix}: "]
+            )
+            continue
+        wrapped_lines.extend(
+            textwrap.wrap(
+                stripped,
+                width=max(width - len(indent), 16),
+                initial_indent=indent,
+                subsequent_indent=indent,
+                break_long_words=False,
+                break_on_hyphens=False,
+            )
+            or [raw_line]
+        )
+    return "\n".join(wrapped_lines)
+
+
 def _draw_feature_markers(axis, fit: FitResult, *, alpha: float = 0.8) -> None:
     feature = fit.feature_summary
     if feature is None:
@@ -139,9 +237,9 @@ def _draw_feature_markers(axis, fit: FitResult, *, alpha: float = 0.8) -> None:
 
 def _draw_selected_integration_windows(axis, result: AnalysisResult) -> None:
     windows = (
-        result.local_peak_integrals
+        [window for window in result.local_peak_integrals if window.area_integral is not None]
         if result.selected_mode == "split" and result.local_peak_integrals
-        else [result.local_total_integral]
+        else ([result.local_total_integral] if result.local_total_integral.area_integral is not None else [])
     )
     for window in windows:
         axis.axvspan(
@@ -169,7 +267,7 @@ def _build_summary_text(result: AnalysisResult) -> str:
     if result.fit_local_disagreement_flag:
         ratio_text = "NA" if result.fit_local_disagreement_ratio is None else f"{result.fit_local_disagreement_ratio:.3g}"
         lines.append(f"qc warning: fit-local vs data-local ratio={ratio_text}")
-        lines.append(f"qc detail: {result.fit_local_disagreement_reason}")
+        lines.append(f"qc detail: {_format_summary_detail(result.fit_local_disagreement_reason)}")
     if result.selected_mode == "single" and result.single_fit is not None:
         if result.single_fit.derived.get("fit_scope") == "detected_window_fallback":
             lines.append("selected via fallback: detected_window_fallback")
@@ -199,10 +297,13 @@ def _fit_text_lines(label: str, fit: FitResult, *, compact: bool = False) -> lis
         return [f"{label}: no feature summary"]
     uncertainty = fit.parameter_diagnostics.get("center_mT")
     center_err = "NA" if uncertainty is None or uncertainty.stderr is None else f"{uncertainty.stderr:.3g}"
-    line = (
-        f"{label}: B0={feature.zero_crossing_field_mT:.3f}±{center_err} mT, "
-        f"pp={feature.peak_to_peak_separation_mT:.3f}, "
-        f"R2={fit.metrics['r_squared']:.4f}, RMSE={fit.residual_summary.rmse:.3g}"
+    line = _format_fit_summary_line(
+        label,
+        zero_crossing_field_mT=feature.zero_crossing_field_mT,
+        center_err=center_err,
+        peak_to_peak_separation_mT=feature.peak_to_peak_separation_mT,
+        r_squared=fit.metrics["r_squared"],
+        rmse=fit.residual_summary.rmse,
     )
     if compact:
         return [line, f"  conv={fit.convergence.success}, bounds={any(fit.bound_hits.values())}"]
@@ -211,6 +312,28 @@ def _fit_text_lines(label: str, fit: FitResult, *, compact: bool = False) -> lis
         f"  conv={fit.convergence.success}, msg={fit.convergence.message}, bounds={any(fit.bound_hits.values())}",
         f"  Ifit={feature.integrated_intensity_proxy if feature.integrated_intensity_proxy is not None else float('nan'):.3g}",
     ]
+
+
+def _format_fit_summary_line(
+    label: str,
+    *,
+    zero_crossing_field_mT: float,
+    center_err: str,
+    peak_to_peak_separation_mT: float,
+    r_squared: float,
+    rmse: float,
+) -> str:
+    return (
+        f"{label}: Hres={zero_crossing_field_mT:.3f}{_PLUS_MINUS}{center_err} mT, "
+        f"{_DELTA}Hpp={peak_to_peak_separation_mT:.3f}, "
+        f"R2={r_squared:.4f}, RMSE={rmse:.3g}"
+    )
+
+
+def _format_summary_detail(detail: str | None) -> str:
+    if not detail:
+        return "NA"
+    return re.sub(r"([:;|])(?=\S)", r"\1 ", detail)
 
 
 def _plotted_integrated_curves(result: AnalysisResult):

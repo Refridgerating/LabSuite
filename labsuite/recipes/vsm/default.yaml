@@ -1,0 +1,17 @@
+name: vsm-default
+background_tail_fraction: 0.12
+background_min_points_per_side: 24
+background_tail_flatness_ratio_tolerance: 0.08
+background_slope_disagreement_ratio_tolerance: 0.35
+center_loop: false
+smoothing_enabled: false
+smoothing_window: 0
+smoothing_polyorder: 0
+uncertainty_scale: 1.0
+uncertainty_zero_field_window_width_mT: 5.0
+uncertainty_zero_field_min_points: 5
+uncertainty_switching_half_width_mT: 3.0
+uncertainty_switching_min_points: 4
+uncertainty_loop_area_smoothing_window: 9
+uncertainty_loop_area_smoothing_polyorder: 2
+uncertainty_min_switching_slope_emu_per_mT: 1.0e-7

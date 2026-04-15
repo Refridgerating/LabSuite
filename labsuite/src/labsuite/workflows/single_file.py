@@ -13,6 +13,13 @@ from labsuite.core.export import (
 )
 from labsuite.core.types import AnalysisResult
 from labsuite.plugins.esr.service import analyze_esr_file
+from labsuite.plugins.vsm.service import (
+    analyze_vsm_file,
+    export_vsm_analysis_csv,
+    export_vsm_analysis_figure,
+    export_vsm_analysis_json,
+    export_vsm_summary_csv,
+)
 
 
 @dataclass(slots=True)
@@ -49,5 +56,39 @@ def run_esr_single_file_workflow(
     export_analysis_json(analysis, artifacts.json_path)
     export_analysis_csv(analysis, artifacts.csv_path, artifacts.summary_csv_path)
     export_analysis_figure(analysis, artifacts.figure_path, show=show_raw)
+
+    return analysis, artifacts
+
+
+def run_vsm_single_file_workflow(
+    source_path: Path,
+    recipe_path: Path,
+    output_dir: Path,
+) -> tuple[object, WorkflowArtifacts]:
+    """Execute the first VSM single-file workflow."""
+
+    output_dir.mkdir(parents=True, exist_ok=True)
+    analysis = analyze_vsm_file(source_path=source_path, recipe_path=recipe_path)
+
+    stem = source_path.stem
+    artifacts = WorkflowArtifacts(
+        json_path=output_dir / f"{stem}_analysis.json",
+        csv_path=output_dir / f"{stem}_trace.csv",
+        summary_csv_path=output_dir / f"{stem}_summary.csv",
+        figure_path=output_dir / f"{stem}_figure.png",
+    )
+    analysis.artifacts.update(
+        {
+            "json_path": str(artifacts.json_path),
+            "csv_path": str(artifacts.csv_path),
+            "summary_csv_path": str(artifacts.summary_csv_path),
+            "figure_path": str(artifacts.figure_path),
+        }
+    )
+
+    export_vsm_analysis_json(analysis, artifacts.json_path)
+    export_vsm_analysis_csv(analysis, artifacts.csv_path)
+    export_vsm_summary_csv(analysis, artifacts.summary_csv_path)
+    export_vsm_analysis_figure(analysis, artifacts.figure_path)
 
     return analysis, artifacts
