@@ -1,0 +1,19 @@
+name: esr-default
+derivative_baseline_edge_points: 64
+absorption_baseline_edge_points: 64
+savgol_window: 11
+savgol_polyorder: 3
+normalize: false
+fit_mode: auto
+peak_min_prominence_ratio: 0.12
+peak_min_distance_mT: 8.0
+peak_min_pair_width_mT: 1.0
+split_min_improvement_ratio: 0.15
+integration_baseline_polyorder: 1
+integration_window_gamma_multiplier: 10.0 # Main lever to widen window
+integration_window_min_half_width_mT: 2.0
+integration_baseline_window_gamma_multiplier: 20.0 # If baseline unstable after widening, increase this
+integration_baseline_window_min_half_width_mT: 6.0
+integration_detected_window_padding_width_multiplier: 10.0 #secondary lever to adjust window size
+fit_max_gamma_as_sweep_fraction: 0.5
+fit_local_disagreement_ratio_threshold: 0.35
