@@ -1,7 +1,7 @@
 # ignore all files under data
 data/**
-
-# but allow placeholder files so directories can exist in Git
+!data/**/
 !data/**/.gitkeep
+
 
 __pycache__/
