@@ -8,8 +8,13 @@ from typing import Any, Callable
 
 from labsuite.core.export import export_analysis_csv, export_analysis_figure
 from labsuite.plugins.esr.serialization import build_esr_report, load_esr_analysis_result
+from labsuite.plugins.fmr.service import build_fmr_report, export_fmr_bundle_from_json
 from labsuite.plugins.vsm.service import build_vsm_report, export_vsm_bundle_from_json
-from labsuite.workflows.single_file import run_esr_single_file_workflow, run_vsm_single_file_workflow
+from labsuite.workflows.single_file import (
+    run_esr_single_file_workflow,
+    run_fmr_single_file_workflow,
+    run_vsm_single_file_workflow,
+)
 
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 DEFAULT_OUTPUT_ROOT = PROJECT_ROOT / "data" / "processed"
@@ -51,6 +56,12 @@ def summarize_vsm_analysis(analysis) -> dict[str, Any]:
     return dict(analysis.summary_metrics)
 
 
+def summarize_fmr_analysis(analysis) -> dict[str, Any]:
+    """Extract batch-summary fields from an FMR analysis result."""
+
+    return dict(analysis.summary_metrics)
+
+
 def export_esr_bundle_from_json(analysis_json_path: Path, output_dir: Path | None = None) -> dict[str, Path]:
     """Regenerate ESR CSV and figure exports from a saved JSON result."""
 
@@ -83,6 +94,12 @@ def build_vsm_report_entry(input_path: Path, output_path: Path | None = None, re
     return build_vsm_report(input_path, output_path=output_path, recursive=recursive)
 
 
+def build_fmr_report_entry(input_path: Path, output_path: Path | None = None, recursive: bool = True) -> Path:
+    """Wrap FMR report generation for the registry."""
+
+    return build_fmr_report(input_path, output_path=output_path, recursive=recursive)
+
+
 MODALITY_SPECS: dict[str, ModalityCliSpec] = {
     "esr": ModalityCliSpec(
         name="esr",
@@ -105,5 +122,16 @@ MODALITY_SPECS: dict[str, ModalityCliSpec] = {
         summarize_analysis=summarize_vsm_analysis,
         export_from_json=export_vsm_bundle_from_json,
         build_report=build_vsm_report_entry,
+    ),
+    "fmr": ModalityCliSpec(
+        name="fmr",
+        source_label="FMR log",
+        allowed_suffixes={".log"},
+        default_pattern="*.log",
+        default_recipe=PROJECT_ROOT / "recipes" / "fmr" / "default.yaml",
+        run_single_workflow=run_fmr_single_file_workflow,
+        summarize_analysis=summarize_fmr_analysis,
+        export_from_json=export_fmr_bundle_from_json,
+        build_report=build_fmr_report_entry,
     ),
 }

@@ -68,6 +68,42 @@ class VsmPreprocessingRecipe:
         return asdict(self)
 
 
+@dataclass(slots=True)
+class FmrRecipe:
+    """Recipe for the first FMR field-swept analysis path."""
+
+    name: str = "fmr-default"
+    signal_channel: str = "fit_source"
+    baseline_edge_points: int = 4
+    baseline_enabled: bool = True
+    smoothing_enabled: bool = False
+    smoothing_window: int = 7
+    smoothing_polyorder: int = 2
+    fit_mode: str = "auto"
+    trace_fit_model: str = "mixed_derivative_lorentzian"
+    physics_model: str = "ip_field_swept_kittel"
+    peak_min_prominence_ratio: float = 0.2
+    peak_min_distance_mT: float = 8.0
+    peak_min_pair_width_mT: float = 4.0
+    candidate_window_padding_width_multiplier: float = 1.5
+    double_fit_min_improvement_ratio: float = 0.15
+    max_resonance_count: int = 2
+    field_guard_fraction: float = 0.05
+    linewidth_max_sweep_fraction: float = 0.35
+    residual_rmse_max_signal_fraction: float = 0.12
+    amplitude_snr_min: float = 5.0
+    shape_center_tolerance_linewidth_fraction: float = 0.35
+    shape_center_tolerance_min_mT: float = 1.5
+    shape_pair_prominence_ratio: float = 0.20
+    shape_consistency_policy: str = "reject"
+    critical_bound_hit_policy: str = "reject"
+    kittel_min_points: int = 3
+    linewidth_min_points: int = 2
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+
 def load_esr_recipe(path: Path) -> EsrPreprocessingRecipe:
     """Load the ESR preprocessing recipe from YAML or a simple fallback mapping."""
 
@@ -138,6 +174,47 @@ def load_vsm_recipe(path: Path) -> VsmPreprocessingRecipe:
         ),
     )
     _validate_vsm_recipe(recipe)
+    return recipe
+
+
+def load_fmr_recipe(path: Path) -> FmrRecipe:
+    """Load the FMR analysis recipe from YAML or a simple fallback mapping."""
+
+    payload = _load_mapping(path)
+    recipe = FmrRecipe(
+        name=str(payload.get("name", "fmr-default")),
+        signal_channel=str(payload.get("signal_channel", "fit_source")),
+        baseline_edge_points=int(payload.get("baseline_edge_points", 4)),
+        baseline_enabled=bool(payload.get("baseline_enabled", True)),
+        smoothing_enabled=bool(payload.get("smoothing_enabled", False)),
+        smoothing_window=int(payload.get("smoothing_window", 7)),
+        smoothing_polyorder=int(payload.get("smoothing_polyorder", 2)),
+        fit_mode=str(payload.get("fit_mode", "auto")),
+        trace_fit_model=str(payload.get("trace_fit_model", "mixed_derivative_lorentzian")),
+        physics_model=str(payload.get("physics_model", "ip_field_swept_kittel")),
+        peak_min_prominence_ratio=float(payload.get("peak_min_prominence_ratio", 0.2)),
+        peak_min_distance_mT=float(payload.get("peak_min_distance_mT", 8.0)),
+        peak_min_pair_width_mT=float(payload.get("peak_min_pair_width_mT", 4.0)),
+        candidate_window_padding_width_multiplier=float(
+            payload.get("candidate_window_padding_width_multiplier", 1.5)
+        ),
+        double_fit_min_improvement_ratio=float(payload.get("double_fit_min_improvement_ratio", 0.15)),
+        max_resonance_count=int(payload.get("max_resonance_count", 2)),
+        field_guard_fraction=float(payload.get("field_guard_fraction", 0.05)),
+        linewidth_max_sweep_fraction=float(payload.get("linewidth_max_sweep_fraction", 0.35)),
+        residual_rmse_max_signal_fraction=float(payload.get("residual_rmse_max_signal_fraction", 0.12)),
+        amplitude_snr_min=float(payload.get("amplitude_snr_min", 5.0)),
+        shape_center_tolerance_linewidth_fraction=float(
+            payload.get("shape_center_tolerance_linewidth_fraction", 0.35)
+        ),
+        shape_center_tolerance_min_mT=float(payload.get("shape_center_tolerance_min_mT", 1.5)),
+        shape_pair_prominence_ratio=float(payload.get("shape_pair_prominence_ratio", 0.20)),
+        shape_consistency_policy=str(payload.get("shape_consistency_policy", "reject")),
+        critical_bound_hit_policy=str(payload.get("critical_bound_hit_policy", "reject")),
+        kittel_min_points=int(payload.get("kittel_min_points", 3)),
+        linewidth_min_points=int(payload.get("linewidth_min_points", 2)),
+    )
+    _validate_fmr_recipe(recipe)
     return recipe
 
 
@@ -264,3 +341,59 @@ def _validate_vsm_recipe(recipe: VsmPreprocessingRecipe) -> None:
         )
     if recipe.uncertainty_min_switching_slope_emu_per_mT <= 0.0:
         raise RecipeError("uncertainty_min_switching_slope_emu_per_mT must be positive")
+
+
+def _validate_fmr_recipe(recipe: FmrRecipe) -> None:
+    if recipe.signal_channel not in {"i", "q", "fit_source", "fit", "aux"}:
+        raise RecipeError("signal_channel must be one of: i, q, fit_source, fit, aux")
+    if recipe.baseline_edge_points < 2:
+        raise RecipeError("baseline_edge_points must be at least 2")
+    if recipe.smoothing_window < 0:
+        raise RecipeError("smoothing_window must be zero or positive")
+    if recipe.smoothing_polyorder < 0:
+        raise RecipeError("smoothing_polyorder must be zero or positive")
+    if recipe.smoothing_enabled:
+        if recipe.smoothing_window < 3:
+            raise RecipeError("smoothing_window must be at least 3 when smoothing_enabled is true")
+        if recipe.smoothing_polyorder >= recipe.smoothing_window:
+            raise RecipeError("smoothing_polyorder must be smaller than smoothing_window")
+    if recipe.fit_mode not in {"auto", "single", "double"}:
+        raise RecipeError("fit_mode must be one of: auto, single, double")
+    if recipe.trace_fit_model != "mixed_derivative_lorentzian":
+        raise RecipeError("trace_fit_model must be 'mixed_derivative_lorentzian'")
+    if recipe.physics_model != "ip_field_swept_kittel":
+        raise RecipeError("physics_model must be 'ip_field_swept_kittel'")
+    if recipe.peak_min_prominence_ratio <= 0.0:
+        raise RecipeError("peak_min_prominence_ratio must be positive")
+    if recipe.peak_min_distance_mT <= 0.0:
+        raise RecipeError("peak_min_distance_mT must be positive")
+    if recipe.peak_min_pair_width_mT <= 0.0:
+        raise RecipeError("peak_min_pair_width_mT must be positive")
+    if recipe.candidate_window_padding_width_multiplier < 0.0:
+        raise RecipeError("candidate_window_padding_width_multiplier must be zero or positive")
+    if not 0.0 <= recipe.double_fit_min_improvement_ratio <= 1.0:
+        raise RecipeError("double_fit_min_improvement_ratio must be between 0 and 1")
+    if recipe.max_resonance_count != 2:
+        raise RecipeError("max_resonance_count must be 2 for FMR v1")
+    if not 0.0 <= recipe.field_guard_fraction < 0.5:
+        raise RecipeError("field_guard_fraction must be between 0 and 0.5")
+    if not 0.0 < recipe.linewidth_max_sweep_fraction <= 1.0:
+        raise RecipeError("linewidth_max_sweep_fraction must be between 0 and 1")
+    if recipe.residual_rmse_max_signal_fraction <= 0.0:
+        raise RecipeError("residual_rmse_max_signal_fraction must be positive")
+    if recipe.amplitude_snr_min <= 0.0:
+        raise RecipeError("amplitude_snr_min must be positive")
+    if recipe.shape_center_tolerance_linewidth_fraction <= 0.0:
+        raise RecipeError("shape_center_tolerance_linewidth_fraction must be positive")
+    if recipe.shape_center_tolerance_min_mT <= 0.0:
+        raise RecipeError("shape_center_tolerance_min_mT must be positive")
+    if recipe.shape_pair_prominence_ratio <= 0.0:
+        raise RecipeError("shape_pair_prominence_ratio must be positive")
+    if recipe.shape_consistency_policy not in {"reject", "warn"}:
+        raise RecipeError("shape_consistency_policy must be one of: reject, warn")
+    if recipe.critical_bound_hit_policy not in {"reject", "warn"}:
+        raise RecipeError("critical_bound_hit_policy must be one of: reject, warn")
+    if recipe.kittel_min_points < 3:
+        raise RecipeError("kittel_min_points must be at least 3")
+    if recipe.linewidth_min_points < 2:
+        raise RecipeError("linewidth_min_points must be at least 2")

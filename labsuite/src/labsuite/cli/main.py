@@ -355,6 +355,21 @@ def _print_single_result(modality: str, analysis, artifacts: WorkflowArtifacts) 
         diagnostic_label = "NA" if diagnostic_area_integral is None else f"{diagnostic_area_integral:.6f}"
         print(f"Primary fit-derived area integral: {total_label}")
         print(f"Diagnostic full-span area integral: {diagnostic_label}")
+    elif modality == "fmr":
+        summary = analysis.summary_metrics
+        print(f"Loaded {analysis.measurement.source_path.name} with {summary['trace_count']} trace(s)")
+        print(f"Sample: {summary['sample_id']}  Replicate: {summary.get('replicate_id')}")
+        print(
+            f"Accepted traces: {summary.get('accepted_trace_count')} / {summary.get('trace_count')}  "
+            f"Mode: {summary.get('measurement_mode')}"
+        )
+        print(
+            "Physics: "
+            f"Kittel={summary.get('kittel_success')}  "
+            f"Linewidth={summary.get('linewidth_success')}  "
+            f"g={summary.get('g')}  "
+            f"alpha={summary.get('alpha')}"
+        )
     else:
         summary = analysis.summary_metrics
         print(f"Loaded {analysis.measurement.source_path.name} with {summary['point_count']} points")
