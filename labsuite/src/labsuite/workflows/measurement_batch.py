@@ -39,6 +39,7 @@ class BatchRunResult:
     output_dir: Path
     summary_csv_path: Path
     manifest_json_path: Path
+    batch_figure_paths: dict[str, Path] = field(default_factory=dict)
 
 
 def discover_source_files(
@@ -128,6 +129,7 @@ def run_batch_workflow(
     source_label: str,
     run_single_workflow: Callable[..., tuple[Any, WorkflowArtifacts]],
     summarize_analysis: Callable[[Any], dict[str, Any]],
+    export_batch_figure: Callable[[Sequence[Any], Path], dict[str, Path]] | None = None,
     workflow_options: dict[str, Any] | None = None,
 ) -> BatchRunResult:
     """Run a modality-specific single-file workflow across all discovered sources."""
@@ -144,6 +146,7 @@ def run_batch_workflow(
 
     succeeded_items: list[BatchItemResult] = []
     failed_items: list[BatchItemResult] = []
+    successful_analyses: list[Any] = []
     item_output_dirs = _build_item_output_dirs(output_dir, discovered_sources)
     resolved_recipe = recipe_path.resolve()
     options = workflow_options or {}
@@ -185,9 +188,11 @@ def run_batch_workflow(
                 summary_metrics=summarize_analysis(analysis),
             )
         )
+        successful_analyses.append(analysis)
 
     summary_csv_path = output_dir / "batch_summary.csv"
     manifest_json_path = output_dir / "batch_manifest.json"
+    batch_figure_paths = {} if export_batch_figure is None else export_batch_figure(successful_analyses, output_dir)
     all_items = sorted([*succeeded_items, *failed_items], key=lambda item: str(item.source_path).lower())
     _write_batch_summary_csv(all_items, summary_csv_path)
     _write_batch_manifest_json(
@@ -196,6 +201,7 @@ def run_batch_workflow(
         recursive=recursive,
         output_dir=output_dir,
         items=all_items,
+        batch_figure_paths=batch_figure_paths,
         destination=manifest_json_path,
     )
     return BatchRunResult(
@@ -205,6 +211,7 @@ def run_batch_workflow(
         output_dir=output_dir,
         summary_csv_path=summary_csv_path,
         manifest_json_path=manifest_json_path,
+        batch_figure_paths=batch_figure_paths,
     )
 
 
@@ -264,8 +271,16 @@ def _write_batch_manifest_json(
     recursive: bool,
     output_dir: Path,
     items: Sequence[BatchItemResult],
+    batch_figure_paths: dict[str, Path],
     destination: Path,
 ) -> None:
+    serialized_batch_figures = {
+        name: str(path)
+        for name, path in sorted(batch_figure_paths.items())
+    }
+    batch_figure_png = None
+    if len(serialized_batch_figures) == 1:
+        batch_figure_png = next(iter(serialized_batch_figures.values()))
     payload = {
         "inputs": [str(path) for path in inputs],
         "scan": {
@@ -273,6 +288,8 @@ def _write_batch_manifest_json(
             "recursive": recursive,
         },
         "output_dir": str(output_dir),
+        "batch_figures": serialized_batch_figures,
+        "batch_figure_png": batch_figure_png,
         "items": [
             {
                 "source_file": str(item.source_path),

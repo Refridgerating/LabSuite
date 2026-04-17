@@ -7,9 +7,17 @@ from pathlib import Path
 from typing import Any, Callable
 
 from labsuite.core.export import export_analysis_csv, export_analysis_figure
-from labsuite.plugins.esr.serialization import build_esr_report, load_esr_analysis_result
+from labsuite.plugins.esr.serialization import (
+    build_esr_report,
+    export_esr_batch_overlay_figure,
+    load_esr_analysis_result,
+)
 from labsuite.plugins.fmr.service import build_fmr_report, export_fmr_bundle_from_json
-from labsuite.plugins.vsm.service import build_vsm_report, export_vsm_bundle_from_json
+from labsuite.plugins.vsm.service import (
+    build_vsm_report,
+    export_vsm_batch_overlay_figure,
+    export_vsm_bundle_from_json,
+)
 from labsuite.workflows.single_file import (
     run_esr_single_file_workflow,
     run_fmr_single_file_workflow,
@@ -33,6 +41,7 @@ class ModalityCliSpec:
     summarize_analysis: Callable[[Any], dict[str, Any]]
     export_from_json: Callable[[Path, Path | None], dict[str, Path]]
     build_report: Callable[[Path, Path | None, bool], Path]
+    export_batch_figure: Callable[[list[Any], Path], dict[str, Path]] | None = None
 
 
 def summarize_esr_analysis(analysis) -> dict[str, Any]:
@@ -111,6 +120,7 @@ MODALITY_SPECS: dict[str, ModalityCliSpec] = {
         summarize_analysis=summarize_esr_analysis,
         export_from_json=export_esr_bundle_from_json,
         build_report=build_esr_report_entry,
+        export_batch_figure=export_esr_batch_overlay_figure,
     ),
     "vsm": ModalityCliSpec(
         name="vsm",
@@ -122,6 +132,7 @@ MODALITY_SPECS: dict[str, ModalityCliSpec] = {
         summarize_analysis=summarize_vsm_analysis,
         export_from_json=export_vsm_bundle_from_json,
         build_report=build_vsm_report_entry,
+        export_batch_figure=export_vsm_batch_overlay_figure,
     ),
     "fmr": ModalityCliSpec(
         name="fmr",
@@ -133,5 +144,6 @@ MODALITY_SPECS: dict[str, ModalityCliSpec] = {
         summarize_analysis=summarize_fmr_analysis,
         export_from_json=export_fmr_bundle_from_json,
         build_report=build_fmr_report_entry,
+        export_batch_figure=None,
     ),
 }

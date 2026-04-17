@@ -17,10 +17,9 @@ from labsuite.core.measurement_models import (
     MeasurementRecord,
     PlotManifest,
     SampleRecord,
-    to_serializable,
 )
 from labsuite.core.recipes import load_vsm_recipe
-from labsuite.plugins.vsm.derived import build_vsm_output_layers, extract_loop_metrics
+from labsuite.plugins.vsm.derived import build_vsm_output_layers, summarize_loop_quality
 from labsuite.plugins.vsm.models import CenteringResult
 from labsuite.plugins.vsm.parser import parse_vsm_file
 from labsuite.plugins.vsm.preprocess import (
@@ -82,14 +81,62 @@ _SUMMARY_FIELDS = [
     "background_slope_negative_emu_per_mT",
     "background_intercept_positive_emu",
     "background_intercept_negative_emu",
+    "background_mode",
     "background_subtraction_mode",
+    "background_correction_accepted",
+    "background_decision_reason",
     "background_qc_passed",
+    "background_score_raw",
+    "background_score_corrected",
+    "background_score_delta",
+    "raw_plateau_slope_positive_normalized",
+    "raw_plateau_slope_negative_normalized",
+    "corrected_plateau_slope_positive_normalized",
+    "corrected_plateau_slope_negative_normalized",
+    "background_flatness_gain_positive",
+    "background_flatness_gain_negative",
+    "background_flatness_gain_score",
+    "background_flatness_gain_balance_score",
+    "background_flatness_gain_balance_ok",
+    "background_soft_override_passed",
+    "background_tail_slope_symmetry_score",
+    "background_saturation_magnitude_symmetry_score",
+    "raw_switching_width_mT",
+    "corrected_switching_width_mT",
+    "background_switching_width_relative_change",
+    "raw_zero_crossing_candidate_count",
+    "corrected_zero_crossing_candidate_count",
+    "raw_plateau_flatness_ratio",
+    "corrected_plateau_flatness_ratio",
+    "raw_saturation_consistency_ratio",
+    "corrected_saturation_consistency_ratio",
+    "raw_branch_asymmetry",
+    "corrected_branch_asymmetry",
+    "raw_loop_closure_error",
+    "corrected_loop_closure_error",
+    "raw_coercive_ambiguity_count",
+    "corrected_coercive_ambiguity_count",
+    "positive_tail_fit_r_squared",
+    "negative_tail_fit_r_squared",
+    "positive_tail_fit_r_squared_soft_warning",
+    "negative_tail_fit_r_squared_soft_warning",
+    "positive_tail_fit_r_squared_catastrophic",
+    "negative_tail_fit_r_squared_catastrophic",
     "corrected_positive_tail_slope_emu_per_mT",
     "corrected_negative_tail_slope_emu_per_mT",
     "corrected_tail_slope_abs_mismatch_emu_per_mT",
     "positive_tail_flatness_ratio",
     "negative_tail_flatness_ratio",
     "raw_tail_slope_disagreement_ratio",
+    "tail_window_selection_mode",
+    "positive_tail_window_initial_point_count",
+    "negative_tail_window_initial_point_count",
+    "positive_tail_window_selected_point_count",
+    "negative_tail_window_selected_point_count",
+    "positive_tail_window_soft_r_squared_rescue_attempted",
+    "negative_tail_window_soft_r_squared_rescue_attempted",
+    "positive_tail_window_rescue_changed_selection",
+    "negative_tail_window_rescue_changed_selection",
     "centering_field_offset_mT",
     "centering_moment_offset_emu",
     "centering_applied",
@@ -107,53 +154,62 @@ def analyze_vsm_file(source_path: Path, recipe_path: Path) -> MeasurementAnalysi
 
     processed_moment, preprocessing_steps, preprocessing_warnings = apply_vsm_preprocessing(dataset, recipe)
     branch_ids, branches = split_vsm_branches(dataset.field_mT)
-    background_fit, corrected_moment, tail_masks, background_warnings = fit_background_slope(
+    background_fit, loop_variants, tail_masks, background_warnings = fit_background_slope(
         dataset.field_mT,
         processed_moment,
         dataset.moment_std_err_emu,
+        branches,
         recipe,
+        temperature_k=dataset.temperature_k,
     )
     combined_background = background_fit["combined_background"]
-
-    uncentered_metrics, metric_warnings = extract_loop_metrics(
-        dataset.field_mT,
-        corrected_moment,
-        dataset.temperature_k,
-        branches,
-        tail_masks["combined_tail_mask"],
+    background_qc = combined_background["qc"]
+    uncorrected_metrics = background_qc["raw_metrics"]
+    corrected_candidate_metrics = background_qc["corrected_candidate_metrics"]
+    selected_uncentered_metrics = (
+        corrected_candidate_metrics
+        if combined_background["background_mode"] == "slope_only"
+        else uncorrected_metrics
     )
+
     centering = CenteringResult(
-        field_offset_mT=float(uncentered_metrics.get("loop_shift_mT") or 0.0),
-        moment_offset_emu=float(uncentered_metrics.get("vertical_shift_emu") or 0.0),
+        field_offset_mT=float(selected_uncentered_metrics.get("loop_shift_mT") or 0.0),
+        moment_offset_emu=float(selected_uncentered_metrics.get("vertical_shift_emu") or 0.0),
         applied=bool(recipe.center_loop),
     )
 
     centered_field = np.asarray(dataset.field_mT - centering.field_offset_mT, dtype=float)
-    centered_moment = np.asarray(corrected_moment - centering.moment_offset_emu, dtype=float)
+    centered_moment = np.asarray(loop_variants["final_moment_emu"] - centering.moment_offset_emu, dtype=float)
     final_field = centered_field if centering.applied else np.asarray(dataset.field_mT, dtype=float)
-    final_moment = centered_moment if centering.applied else np.asarray(corrected_moment, dtype=float)
+    final_moment = centered_moment if centering.applied else np.asarray(loop_variants["final_moment_emu"], dtype=float)
 
-    final_metrics, final_metric_warnings = extract_loop_metrics(
-        final_field,
-        final_moment,
-        dataset.temperature_k,
-        branches,
-        tail_masks["combined_tail_mask"],
+    final_metrics = summarize_loop_quality(
+        field_mT=final_field,
+        moment_emu=final_moment,
+        branches=branches,
+        positive_tail_indices=np.asarray(combined_background["selected_positive_indices"], dtype=int),
+        negative_tail_indices=np.asarray(combined_background["selected_negative_indices"], dtype=int),
+        temperature_k=dataset.temperature_k,
     )
 
-    warnings = [
+    warnings = list(
+        dict.fromkeys(
+            [
         *filename_warnings,
         *preprocessing_warnings,
         *background_warnings,
-        *metric_warnings,
-        *final_metric_warnings,
-    ]
+                *uncorrected_metrics.get("warnings", []),
+                *corrected_candidate_metrics.get("warnings", []),
+                *final_metrics.get("warnings", []),
+            ]
+        )
+    )
     direct_observables, trust_diagnostics, uncertainty_estimates = build_vsm_output_layers(
         field_mT=final_field,
         moment_emu=final_moment,
         branches=branches,
         detailed_metrics=final_metrics,
-        background_qc=combined_background["qc"],
+        background_qc=background_qc,
         background_details=combined_background,
         warnings=warnings,
         moment_std_err_emu=dataset.moment_std_err_emu,
@@ -198,6 +254,7 @@ def analyze_vsm_file(source_path: Path, recipe_path: Path) -> MeasurementAnalysi
         "branch_asymmetry": trust_diagnostics["branch_asymmetry"],
         "switching_complexity": trust_diagnostics["switching_complexity"],
         "switching_complexity_label": trust_diagnostics["switching_complexity_label"],
+        "background_mode": combined_background["background_mode"],
         "background_slope_emu_per_mT": combined_background["slope_emu_per_mT"],
         "background_intercept_emu": combined_background["intercept_emu"],
         "background_slope_positive_emu_per_mT": combined_background["positive_slope_emu_per_mT"],
@@ -205,13 +262,80 @@ def analyze_vsm_file(source_path: Path, recipe_path: Path) -> MeasurementAnalysi
         "background_intercept_positive_emu": combined_background["positive_intercept_emu"],
         "background_intercept_negative_emu": combined_background["negative_intercept_emu"],
         "background_subtraction_mode": combined_background["subtraction_mode"],
-        "background_qc_passed": combined_background["qc"]["passed"],
-        "corrected_positive_tail_slope_emu_per_mT": combined_background["qc"]["corrected_positive_tail_slope_emu_per_mT"],
-        "corrected_negative_tail_slope_emu_per_mT": combined_background["qc"]["corrected_negative_tail_slope_emu_per_mT"],
-        "corrected_tail_slope_abs_mismatch_emu_per_mT": combined_background["qc"]["corrected_tail_slope_abs_mismatch_emu_per_mT"],
-        "positive_tail_flatness_ratio": combined_background["qc"]["positive_tail_flatness_ratio"],
-        "negative_tail_flatness_ratio": combined_background["qc"]["negative_tail_flatness_ratio"],
-        "raw_tail_slope_disagreement_ratio": combined_background["qc"]["raw_tail_slope_disagreement_ratio"],
+        "background_correction_accepted": combined_background["correction_accepted"],
+        "background_decision_reason": combined_background["decision_reason"],
+        "background_qc_passed": combined_background["qc_passed"],
+        "background_score_raw": background_qc["score_raw"],
+        "background_score_corrected": background_qc["score_corrected"],
+        "background_score_delta": background_qc["score_delta"],
+        "raw_plateau_slope_positive_normalized": background_qc["comparison"]["raw_plateau_slope_positive_normalized"],
+        "raw_plateau_slope_negative_normalized": background_qc["comparison"]["raw_plateau_slope_negative_normalized"],
+        "corrected_plateau_slope_positive_normalized": background_qc["comparison"][
+            "corrected_plateau_slope_positive_normalized"
+        ],
+        "corrected_plateau_slope_negative_normalized": background_qc["comparison"][
+            "corrected_plateau_slope_negative_normalized"
+        ],
+        "background_flatness_gain_positive": background_qc["comparison"]["background_flatness_gain_positive"],
+        "background_flatness_gain_negative": background_qc["comparison"]["background_flatness_gain_negative"],
+        "background_flatness_gain_score": background_qc["comparison"]["background_flatness_gain_score"],
+        "background_flatness_gain_balance_score": background_qc["comparison"]["background_flatness_gain_balance_score"],
+        "background_flatness_gain_balance_ok": background_qc["comparison"]["background_flatness_gain_balance_ok"],
+        "background_soft_override_passed": background_qc["comparison"]["background_soft_override_passed"],
+        "background_tail_slope_symmetry_score": background_qc["comparison"]["background_tail_slope_symmetry_score"],
+        "background_saturation_magnitude_symmetry_score": background_qc["comparison"][
+            "background_saturation_magnitude_symmetry_score"
+        ],
+        "raw_switching_width_mT": background_qc["comparison"]["raw_switching_width_mT"],
+        "corrected_switching_width_mT": background_qc["comparison"]["corrected_switching_width_mT"],
+        "background_switching_width_relative_change": background_qc["comparison"][
+            "background_switching_width_relative_change"
+        ],
+        "raw_zero_crossing_candidate_count": background_qc["comparison"]["raw_zero_crossing_candidate_count"],
+        "corrected_zero_crossing_candidate_count": background_qc["comparison"][
+            "corrected_zero_crossing_candidate_count"
+        ],
+        "raw_plateau_flatness_ratio": uncorrected_metrics["plateau_flatness_ratio"],
+        "corrected_plateau_flatness_ratio": corrected_candidate_metrics["plateau_flatness_ratio"],
+        "raw_saturation_consistency_ratio": uncorrected_metrics["saturation_consistency_ratio"],
+        "corrected_saturation_consistency_ratio": corrected_candidate_metrics["saturation_consistency_ratio"],
+        "raw_branch_asymmetry": uncorrected_metrics["branch_asymmetry"],
+        "corrected_branch_asymmetry": corrected_candidate_metrics["branch_asymmetry"],
+        "raw_loop_closure_error": uncorrected_metrics["loop_closure_error"],
+        "corrected_loop_closure_error": corrected_candidate_metrics["loop_closure_error"],
+        "raw_coercive_ambiguity_count": uncorrected_metrics["coercive_ambiguity_count"],
+        "corrected_coercive_ambiguity_count": corrected_candidate_metrics["coercive_ambiguity_count"],
+        "positive_tail_fit_r_squared": background_qc["positive_tail_fit_r_squared"],
+        "negative_tail_fit_r_squared": background_qc["negative_tail_fit_r_squared"],
+        "positive_tail_fit_r_squared_soft_warning": background_qc["positive_tail_fit_r_squared_soft_warning"],
+        "negative_tail_fit_r_squared_soft_warning": background_qc["negative_tail_fit_r_squared_soft_warning"],
+        "positive_tail_fit_r_squared_catastrophic": background_qc["positive_tail_fit_r_squared_catastrophic"],
+        "negative_tail_fit_r_squared_catastrophic": background_qc["negative_tail_fit_r_squared_catastrophic"],
+        "corrected_positive_tail_slope_emu_per_mT": background_qc["corrected_positive_tail_slope_emu_per_mT"],
+        "corrected_negative_tail_slope_emu_per_mT": background_qc["corrected_negative_tail_slope_emu_per_mT"],
+        "corrected_tail_slope_abs_mismatch_emu_per_mT": background_qc["corrected_tail_slope_abs_mismatch_emu_per_mT"],
+        "positive_tail_flatness_ratio": background_qc["positive_tail_flatness_ratio"],
+        "negative_tail_flatness_ratio": background_qc["negative_tail_flatness_ratio"],
+        "raw_tail_slope_disagreement_ratio": background_qc["raw_tail_slope_disagreement_ratio"],
+        "tail_window_selection_mode": background_qc["tail_window_selection_mode"],
+        "positive_tail_window_initial_point_count": background_qc["positive_tail_window_initial_point_count"],
+        "negative_tail_window_initial_point_count": background_qc["negative_tail_window_initial_point_count"],
+        "positive_tail_window_selected_point_count": background_qc["positive_tail_window_selected_point_count"],
+        "negative_tail_window_selected_point_count": background_qc["negative_tail_window_selected_point_count"],
+        "positive_tail_window_selected_field_min_mT": background_qc["positive_tail_window_selected_field_min_mT"],
+        "negative_tail_window_selected_field_max_mT": background_qc["negative_tail_window_selected_field_max_mT"],
+        "positive_tail_window_soft_r_squared_rescue_attempted": background_qc[
+            "positive_tail_window_soft_r_squared_rescue_attempted"
+        ],
+        "negative_tail_window_soft_r_squared_rescue_attempted": background_qc[
+            "negative_tail_window_soft_r_squared_rescue_attempted"
+        ],
+        "positive_tail_window_rescue_changed_selection": background_qc[
+            "positive_tail_window_rescue_changed_selection"
+        ],
+        "negative_tail_window_rescue_changed_selection": background_qc[
+            "negative_tail_window_rescue_changed_selection"
+        ],
         "centering_field_offset_mT": centering.field_offset_mT,
         "centering_moment_offset_emu": centering.moment_offset_emu,
         "centering_applied": centering.applied,
@@ -231,7 +355,10 @@ def analyze_vsm_file(source_path: Path, recipe_path: Path) -> MeasurementAnalysi
         },
         "processed_data": {
             "processed_moment_emu": processed_moment,
-            "corrected_moment_emu": corrected_moment,
+            "uncorrected_moment_emu": loop_variants["uncorrected_moment_emu"],
+            "slope_corrected_moment_emu": loop_variants["slope_corrected_moment_emu"],
+            "corrected_moment_emu": loop_variants["slope_corrected_moment_emu"],
+            "selected_moment_emu": loop_variants["final_moment_emu"],
             "centered_field_mT": centered_field,
             "centered_moment_emu": centered_moment,
             "final_field_mT": final_field,
@@ -254,6 +381,7 @@ def analyze_vsm_file(source_path: Path, recipe_path: Path) -> MeasurementAnalysi
         "background_fit": {
             "positive_tail_fit": background_fit["positive_tail_fit"],
             "negative_tail_fit": background_fit["negative_tail_fit"],
+            "evaluation": background_qc,
             "combined_background": {
                 **combined_background,
                 "positive_tail_mask": tail_masks["positive_tail_mask"],
@@ -267,7 +395,8 @@ def analyze_vsm_file(source_path: Path, recipe_path: Path) -> MeasurementAnalysi
             "applied": centering.applied,
         },
         "metrics": {
-            "uncentered": uncentered_metrics,
+            "uncorrected": uncorrected_metrics,
+            "corrected_candidate": corrected_candidate_metrics,
             "final": final_metrics,
         },
         "direct_observables": direct_observables,
@@ -312,7 +441,7 @@ def export_vsm_analysis_json(result: MeasurementAnalysisResult, destination: Pat
 
 
 def export_vsm_analysis_csv(result: MeasurementAnalysisResult | dict[str, Any], destination: Path) -> Path:
-    """Export corrected VSM loop data to CSV."""
+    """Export evaluated VSM loop data to CSV."""
 
     payload = _normalize_result(result)
     raw_data = payload["analysis_payload"]["raw_data"]
@@ -326,7 +455,8 @@ def export_vsm_analysis_csv(result: MeasurementAnalysisResult | dict[str, Any], 
         "field_mT",
         "raw_moment_emu",
         "processed_moment_emu",
-        "corrected_moment_emu",
+        "uncorrected_moment_emu",
+        "slope_corrected_moment_emu",
         "background_fit_emu",
         "positive_tail_fit_emu",
         "negative_tail_fit_emu",
@@ -334,6 +464,7 @@ def export_vsm_analysis_csv(result: MeasurementAnalysisResult | dict[str, Any], 
         "branch_direction",
         "temperature_k",
         "moment_std_err_emu",
+        "selected_moment_emu",
         "final_field_mT",
         "final_moment_emu",
     ]
@@ -364,7 +495,8 @@ def export_vsm_analysis_csv(result: MeasurementAnalysisResult | dict[str, Any], 
                 _format_float(field_value),
                 _format_float(raw_data["moment_emu"][index]),
                 _format_float(processed_data["processed_moment_emu"][index]),
-                _format_float(processed_data["corrected_moment_emu"][index]),
+                _format_float(processed_data["uncorrected_moment_emu"][index]),
+                _format_float(processed_data["slope_corrected_moment_emu"][index]),
                 _format_float(slope * field_value),
                 _format_float(positive_tail_index_map.get(index)),
                 _format_float(negative_tail_index_map.get(index)),
@@ -372,6 +504,7 @@ def export_vsm_analysis_csv(result: MeasurementAnalysisResult | dict[str, Any], 
                 processed_data["branch_direction"][index],
                 _format_float(raw_data["temperature_k"][index]),
                 _format_float(raw_data["moment_std_err_emu"][index]),
+                _format_float(processed_data["selected_moment_emu"][index]),
                 _format_float(processed_data["final_field_mT"][index]),
                 _format_float(processed_data["final_moment_emu"][index]),
             ]
@@ -418,8 +551,9 @@ def export_vsm_analysis_figure(result: MeasurementAnalysisResult | dict[str, Any
 
     field_mT = np.asarray(raw_data["field_mT"], dtype=float)
     raw_moment = np.asarray(raw_data["moment_emu"], dtype=float)
-    processed_moment = np.asarray(processed_data["processed_moment_emu"], dtype=float)
-    corrected_moment = np.asarray(processed_data["corrected_moment_emu"], dtype=float)
+    uncorrected_moment = np.asarray(processed_data["uncorrected_moment_emu"], dtype=float)
+    slope_corrected_moment = np.asarray(processed_data["slope_corrected_moment_emu"], dtype=float)
+    selected_moment = np.asarray(processed_data["selected_moment_emu"], dtype=float)
     final_field = np.asarray(processed_data["final_field_mT"], dtype=float)
     final_moment = np.asarray(processed_data["final_moment_emu"], dtype=float)
     combined_background = background_fit["combined_background"]
@@ -429,14 +563,15 @@ def export_vsm_analysis_figure(result: MeasurementAnalysisResult | dict[str, Any
     applied_background = slope * field_mT
 
     axes[0].plot(field_mT, raw_moment, color="#5f6b7a", linewidth=1.1, label="Raw moment")
-    axes[0].plot(field_mT, processed_moment, color="#0f766e", linewidth=1.1, label="Processed moment")
+    axes[0].plot(field_mT, uncorrected_moment, color="#0f766e", linewidth=1.1, label="Uncorrected analysis moment")
+    axes[0].plot(field_mT, slope_corrected_moment, color="#2563eb", linewidth=1.1, label="Slope-corrected candidate")
     axes[0].plot(
         field_mT,
         applied_background,
         color="#c2410c",
         linewidth=1.1,
         linestyle="--",
-        label="Applied slope-only background",
+        label="Evaluated slope-only background",
     )
     positive_fit_x = np.asarray(positive_fit["fitted_x"], dtype=float)
     positive_fit_y = np.asarray(positive_fit["fitted_y"], dtype=float)
@@ -444,11 +579,11 @@ def export_vsm_analysis_figure(result: MeasurementAnalysisResult | dict[str, Any
     negative_fit_y = np.asarray(negative_fit["fitted_y"], dtype=float)
     if positive_fit_x.size:
         axes[0].plot(positive_fit_x, positive_fit_y, color="#b91c1c", linewidth=1.4, label="Positive tail fit")
-        axes[0].scatter(positive_fit_x, processed_moment[np.asarray(positive_fit["selected_indices"], dtype=int)], s=14, color="#b91c1c", alpha=0.8)
+        axes[0].scatter(positive_fit_x, uncorrected_moment[np.asarray(positive_fit["selected_indices"], dtype=int)], s=14, color="#b91c1c", alpha=0.8)
     if negative_fit_x.size:
         axes[0].plot(negative_fit_x, negative_fit_y, color="#7c2d12", linewidth=1.4, label="Negative tail fit")
-        axes[0].scatter(negative_fit_x, processed_moment[np.asarray(negative_fit["selected_indices"], dtype=int)], s=14, color="#7c2d12", alpha=0.8)
-    axes[0].set_title(f"Raw and Split-Tail Background Fits: {summary_metrics['sample_id']}")
+        axes[0].scatter(negative_fit_x, uncorrected_moment[np.asarray(negative_fit["selected_indices"], dtype=int)], s=14, color="#7c2d12", alpha=0.8)
+    axes[0].set_title(f"Raw and Evaluated Background Fits: {summary_metrics['sample_id']}")
     axes[0].set_ylabel("Moment (emu)")
     axes[0].grid(alpha=0.2)
     axes[0].legend(loc="best")
@@ -461,12 +596,21 @@ def export_vsm_analysis_figure(result: MeasurementAnalysisResult | dict[str, Any
         label = f"Branch {branch['branch_id']} ({branch['direction']})"
         axes[1].plot(final_field[start:end], final_moment[start:end], color=color, linewidth=1.3, label=label)
 
+    if summary_metrics.get("background_mode") != "slope_only":
+        axes[1].plot(
+            field_mT,
+            slope_corrected_moment,
+            color="0.55",
+            linewidth=0.9,
+            linestyle=":",
+            label="Slope-corrected candidate",
+        )
     if centering["applied"]:
-        axes[1].plot(field_mT, corrected_moment, color="0.55", linewidth=0.9, linestyle=":", label="Corrected uncentered")
+        axes[1].plot(field_mT, selected_moment, color="0.45", linewidth=0.9, linestyle="-.", label="Selected uncentered")
 
     axes[1].axhline(0.0, color="0.3", linewidth=0.8)
     axes[1].axvline(0.0, color="0.3", linewidth=0.8)
-    axes[1].set_title("Corrected Loop")
+    axes[1].set_title(f"Final Loop ({summary_metrics.get('background_mode')})")
     axes[1].set_xlabel("Field (mT)")
     axes[1].set_ylabel("Moment (emu)")
     axes[1].grid(alpha=0.2)
@@ -486,6 +630,44 @@ def export_vsm_analysis_figure(result: MeasurementAnalysisResult | dict[str, Any
     figure.savefig(destination, dpi=200)
     plt.close(figure)
     return destination
+
+
+def export_vsm_batch_overlay_figure(
+    analyses: list[MeasurementAnalysisResult],
+    output_dir: Path,
+) -> dict[str, Path]:
+    """Export one batch-level VSM hysteresis overlay figure."""
+
+    if not analyses:
+        return {}
+
+    destination = output_dir / "batch_hysteresis_overlay.png"
+    figure, axis = plt.subplots(1, 1, figsize=(10.5, 8.0), constrained_layout=True)
+    colors = plt.cm.viridis(np.linspace(0.08, 0.92, max(len(analyses), 1)))
+
+    for index, analysis in enumerate(analyses):
+        payload = analysis.analysis_payload["processed_data"]
+        final_field = np.asarray(payload["final_field_mT"], dtype=float)
+        final_moment = np.asarray(payload["final_moment_emu"], dtype=float)
+        axis.plot(
+            final_field,
+            final_moment,
+            color=colors[index],
+            linewidth=1.25,
+            label=_vsm_batch_overlay_label(analysis),
+        )
+
+    axis.axhline(0.0, color="0.35", linewidth=0.8)
+    axis.axvline(0.0, color="0.35", linewidth=0.8)
+    axis.set_title("VSM Batch Hysteresis Overlay")
+    axis.set_xlabel("Field (mT)")
+    axis.set_ylabel("Moment (emu)")
+    axis.grid(alpha=0.2)
+    axis.legend(loc="best", ncols=2)
+
+    figure.savefig(destination, dpi=200)
+    plt.close(figure)
+    return {"batch_hysteresis_overlay": destination}
 
 
 def export_vsm_bundle_from_json(analysis_json_path: Path, output_dir: Path | None = None) -> dict[str, Path]:
@@ -594,8 +776,9 @@ def _build_plot_manifest(summary_metrics: dict[str, Any], centering: CenteringRe
         title=f"VSM Loop Diagnostic: {summary_metrics['sample_id']}",
         series=[
             {"label": "Raw moment", "x": "field_mT", "y": "moment_emu"},
-            {"label": "Corrected loop", "x": "final_field_mT", "y": "final_moment_emu"},
-            {"label": "Applied slope-only background", "x": "field_mT", "y": "background_fit_emu"},
+            {"label": "Slope-corrected candidate", "x": "field_mT", "y": "slope_corrected_moment_emu"},
+            {"label": "Final loop", "x": "final_field_mT", "y": "final_moment_emu"},
+            {"label": "Evaluated slope-only background", "x": "field_mT", "y": "background_fit_emu"},
         ],
         annotations=[
             {"label": "Hc-", "value": summary_metrics.get("coercive_field_negative_mT")},
@@ -642,11 +825,32 @@ def _build_metric_summary(payload: dict[str, Any]) -> str:
         f"vertical shift = {_format_float(summary_metrics.get('vertical_shift_emu'))} emu",
         f"loop area = {_format_float(summary_metrics.get('loop_area_emu_mT'))} +/- {_format_float(summary_metrics.get('loop_area_error'))} emu*mT",
         f"saturation confidence = {_format_float(summary_metrics.get('saturation_confidence'))}",
-        f"branch asymmetry = {_format_float(summary_metrics.get('branch_asymmetry'))}",
-        f"switching complexity = {_format_float(summary_metrics.get('switching_complexity'))} ({summary_metrics.get('switching_complexity_label')})",
-        f"bg qc passed = {summary_metrics.get('background_qc_passed')}",
-        f"bg slope mean = {_format_float(summary_metrics.get('background_slope_emu_per_mT'))} emu/mT",
+        f"background mode = {summary_metrics.get('background_mode')}",
+        f"background accepted = {summary_metrics.get('background_correction_accepted')}",
+        f"background reason = {summary_metrics.get('background_decision_reason')}",
+        f"background qc passed = {summary_metrics.get('background_qc_passed')}",
+        f"tail selection mode = {summary_metrics.get('tail_window_selection_mode')}",
+        f"tail window pts init sel +/- = {_format_float(summary_metrics.get('positive_tail_window_initial_point_count'))}:{_format_float(summary_metrics.get('positive_tail_window_selected_point_count'))} / {_format_float(summary_metrics.get('negative_tail_window_initial_point_count'))}:{_format_float(summary_metrics.get('negative_tail_window_selected_point_count'))}",
+        f"tail slopes raw +/- = {_format_float(summary_metrics.get('raw_plateau_slope_positive_normalized'))} / {_format_float(summary_metrics.get('raw_plateau_slope_negative_normalized'))}",
+        f"tail slopes corr +/- = {_format_float(summary_metrics.get('corrected_plateau_slope_positive_normalized'))} / {_format_float(summary_metrics.get('corrected_plateau_slope_negative_normalized'))}",
+        f"tail fit r^2 +/- = {_format_float(summary_metrics.get('positive_tail_fit_r_squared'))} / {_format_float(summary_metrics.get('negative_tail_fit_r_squared'))}",
+        f"tail fit soft warn +/- = {summary_metrics.get('positive_tail_fit_r_squared_soft_warning')} / {summary_metrics.get('negative_tail_fit_r_squared_soft_warning')}",
+        f"tail fit catastrophic +/- = {summary_metrics.get('positive_tail_fit_r_squared_catastrophic')} / {summary_metrics.get('negative_tail_fit_r_squared_catastrophic')}",
+        f"flatness gain +/- = {_format_float(summary_metrics.get('background_flatness_gain_positive'))} / {_format_float(summary_metrics.get('background_flatness_gain_negative'))}",
+        f"flatness gain score = {_format_float(summary_metrics.get('background_flatness_gain_score'))}",
+        f"flatness gain balance = {_format_float(summary_metrics.get('background_flatness_gain_balance_score'))}",
+        f"flatness gain balance ok = {summary_metrics.get('background_flatness_gain_balance_ok')}",
+        f"soft override passed = {summary_metrics.get('background_soft_override_passed')}",
+        f"tail rescue attempted +/- = {summary_metrics.get('positive_tail_window_soft_r_squared_rescue_attempted')} / {summary_metrics.get('negative_tail_window_soft_r_squared_rescue_attempted')}",
+        f"tail rescue changed +/- = {summary_metrics.get('positive_tail_window_rescue_changed_selection')} / {summary_metrics.get('negative_tail_window_rescue_changed_selection')}",
+        f"tail slope symmetry = {_format_float(summary_metrics.get('background_tail_slope_symmetry_score'))}",
+        f"sat magnitude symmetry = {_format_float(summary_metrics.get('background_saturation_magnitude_symmetry_score'))}",
+        f"switching width raw/corr = {_format_float(summary_metrics.get('raw_switching_width_mT'))} / {_format_float(summary_metrics.get('corrected_switching_width_mT'))}",
+        f"zero crossings raw/corr = {_format_float(summary_metrics.get('raw_zero_crossing_candidate_count'))} / {_format_float(summary_metrics.get('corrected_zero_crossing_candidate_count'))}",
+        f"switching width rel change = {_format_float(summary_metrics.get('background_switching_width_relative_change'))}",
         f"center applied = {summary_metrics.get('centering_applied')}",
+        f"secondary branch asymmetry = {_format_float(summary_metrics.get('branch_asymmetry'))}",
+        f"secondary switching complexity = {_format_float(summary_metrics.get('switching_complexity'))} ({summary_metrics.get('switching_complexity_label')})",
     ]
     ambiguity_flags = summary_metrics.get("ambiguity_flags", [])
     if ambiguity_flags:
@@ -655,6 +859,17 @@ def _build_metric_summary(payload: dict[str, Any]) -> str:
     if warnings:
         lines.append(f"warnings = {len(warnings)}")
     return "\n".join(lines)
+
+
+def _vsm_batch_overlay_label(result: MeasurementAnalysisResult) -> str:
+    summary = result.summary_metrics
+    stem = result.measurement.source_path.stem
+    temperature_k = summary.get("temperature_k")
+    replicate_id = summary.get("replicate_id")
+    suffix_parts = [part for part in [_format_float(temperature_k), replicate_id] if part]
+    if not suffix_parts:
+        return stem
+    return f"{stem} ({', '.join(suffix_parts)})"
 
 
 def _build_single_report_text(payload: dict[str, Any]) -> str:
@@ -684,11 +899,34 @@ def _build_single_report_text(payload: dict[str, Any]) -> str:
         "## Trust Diagnostics",
         "",
         f"- Saturation confidence: `{_format_float(summary.get('saturation_confidence'))}`",
+        f"- Background mode: `{summary.get('background_mode')}`",
+        f"- Background accepted: `{summary.get('background_correction_accepted')}`",
+        f"- Background decision reason: `{summary.get('background_decision_reason')}`",
         f"- Background QC passed: `{summary.get('background_qc_passed')}`",
+        f"- Tail selection mode: `{summary.get('tail_window_selection_mode')}`",
+        f"- Tail window counts (+ init/selected, - init/selected): `{_format_float(summary.get('positive_tail_window_initial_point_count'))}` / `{_format_float(summary.get('positive_tail_window_selected_point_count'))}` / `{_format_float(summary.get('negative_tail_window_initial_point_count'))}` / `{_format_float(summary.get('negative_tail_window_selected_point_count'))}`",
+        f"- Raw residual tail slopes (+ / -): `{_format_float(summary.get('raw_plateau_slope_positive_normalized'))}` / `{_format_float(summary.get('raw_plateau_slope_negative_normalized'))}`",
+        f"- Corrected residual tail slopes (+ / -): `{_format_float(summary.get('corrected_plateau_slope_positive_normalized'))}` / `{_format_float(summary.get('corrected_plateau_slope_negative_normalized'))}`",
+        f"- Tail fit R^2 (+ / -): `{_format_float(summary.get('positive_tail_fit_r_squared'))}` / `{_format_float(summary.get('negative_tail_fit_r_squared'))}`",
+        f"- Tail fit soft warning (+ / -): `{summary.get('positive_tail_fit_r_squared_soft_warning')}` / `{summary.get('negative_tail_fit_r_squared_soft_warning')}`",
+        f"- Tail fit catastrophic (+ / -): `{summary.get('positive_tail_fit_r_squared_catastrophic')}` / `{summary.get('negative_tail_fit_r_squared_catastrophic')}`",
+        f"- Flatness gain (+ / - / score): `{_format_float(summary.get('background_flatness_gain_positive'))}` / `{_format_float(summary.get('background_flatness_gain_negative'))}` / `{_format_float(summary.get('background_flatness_gain_score'))}`",
+        f"- Flatness gain balance / ok / override: `{_format_float(summary.get('background_flatness_gain_balance_score'))}` / `{summary.get('background_flatness_gain_balance_ok')}` / `{summary.get('background_soft_override_passed')}`",
+        f"- Tail rescue attempted (+ / -): `{summary.get('positive_tail_window_soft_r_squared_rescue_attempted')}` / `{summary.get('negative_tail_window_soft_r_squared_rescue_attempted')}`",
+        f"- Tail rescue changed (+ / -): `{summary.get('positive_tail_window_rescue_changed_selection')}` / `{summary.get('negative_tail_window_rescue_changed_selection')}`",
+        f"- Corrected tail slope symmetry: `{_format_float(summary.get('background_tail_slope_symmetry_score'))}`",
+        f"- Corrected saturation magnitude symmetry: `{_format_float(summary.get('background_saturation_magnitude_symmetry_score'))}`",
+        f"- Switching width raw / corrected / rel change: `{_format_float(summary.get('raw_switching_width_mT'))}` / `{_format_float(summary.get('corrected_switching_width_mT'))}` / `{_format_float(summary.get('background_switching_width_relative_change'))}`",
+        f"- Zero crossing candidates raw / corrected: `{_format_float(summary.get('raw_zero_crossing_candidate_count'))}` / `{_format_float(summary.get('corrected_zero_crossing_candidate_count'))}`",
+        f"- Background mode detail: `{trust['background_fit_details'].get('background_mode')}`",
+        "",
+        "## Secondary Diagnostics",
+        "",
+        f"- Background score raw / corrected / delta: `{_format_float(summary.get('background_score_raw'))}` / `{_format_float(summary.get('background_score_corrected'))}` / `{_format_float(summary.get('background_score_delta'))}`",
         f"- Branch asymmetry: `{_format_float(summary.get('branch_asymmetry'))}`",
         f"- Switching complexity: `{_format_float(summary.get('switching_complexity'))}` (`{summary.get('switching_complexity_label')}`)",
         f"- Ambiguity flags: `{ '|'.join(summary.get('ambiguity_flags', [])) }`",
-        f"- Background subtraction mode: `{trust['background_fit_details'].get('background_subtraction_mode')}`",
+        f"- Raw / corrected loop closure: `{_format_float(summary.get('raw_loop_closure_error'))}` / `{_format_float(summary.get('corrected_loop_closure_error'))}`",
         "",
         "## Detailed Fields",
         "",

@@ -1,6 +1,8 @@
 from __future__ import annotations
 
-from labsuite.plugins.fmr.service import analyze_fmr_file
+from matplotlib.axes import Axes
+
+from labsuite.plugins.fmr.service import analyze_fmr_file, export_fmr_trace_diagnostic_figures
 
 
 def test_analyze_fmr_file_builds_single_unassigned_series(tmp_path, project_root, write_phasefmr_log) -> None:
@@ -12,6 +14,7 @@ def test_analyze_fmr_file_builds_single_unassigned_series(tmp_path, project_root
     assert "series_collection_result" in result.analysis_payload
     assert "single_unassigned" in result.analysis_payload["series_collection_result"]["series_by_label"]
     assert result.analysis_payload["physics_collection_result"]["physics_by_label"]["single_unassigned"]["kittel_fit"]["success"] is True
+    assert all(fit["r_squared"] is not None for fit in result.analysis_payload["trace_fit_results"])
 
 
 def test_analyze_fmr_file_builds_mode_1_and_mode_2_series_for_double_traces(tmp_path, project_root, write_phasefmr_log) -> None:
@@ -45,3 +48,23 @@ def test_analyze_fmr_file_preserves_rejected_or_partial_components(tmp_path, pro
     assert len(fits) == 1
     assert fits[0]["selected_mode"] in {"single", "double"}
     assert fits[0]["selected_components"]
+
+
+def test_trace_diagnostics_annotate_r_squared(tmp_path, project_root, write_phasefmr_log, monkeypatch) -> None:
+    source_file = write_phasefmr_log(tmp_path / "Temp2-Co-A-2,5to17GHz-R1.log", frequencies_GHz=[8.0, 10.0])
+    recipe_path = project_root / "recipes" / "fmr" / "default.yaml"
+    result = analyze_fmr_file(source_file, recipe_path)
+
+    captured: list[str] = []
+    original_text = Axes.text
+
+    def _capture_text(self, *args, **kwargs):
+        if len(args) >= 3:
+            captured.append(str(args[2]))
+        return original_text(self, *args, **kwargs)
+
+    monkeypatch.setattr(Axes, "text", _capture_text)
+    export_fmr_trace_diagnostic_figures(result, tmp_path / "diagnostics")
+
+    assert captured
+    assert any("R^2 =" in item for item in captured)

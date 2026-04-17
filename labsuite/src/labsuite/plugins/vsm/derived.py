@@ -89,6 +89,133 @@ def extract_loop_metrics(
     return metrics, warnings
 
 
+def summarize_loop_quality(
+    *,
+    field_mT: np.ndarray,
+    moment_emu: np.ndarray,
+    branches: list[BranchSegment],
+    positive_tail_indices: np.ndarray,
+    negative_tail_indices: np.ndarray,
+    temperature_k: np.ndarray | None = None,
+) -> dict[str, Any]:
+    """Summarize loop metrics plus background-comparison diagnostics."""
+
+    if temperature_k is None:
+        temperature_k = np.full(field_mT.shape, np.nan, dtype=float)
+
+    tail_mask = np.zeros(field_mT.size, dtype=bool)
+    tail_mask[np.asarray(positive_tail_indices, dtype=int)] = True
+    tail_mask[np.asarray(negative_tail_indices, dtype=int)] = True
+    loop_metrics, warnings = extract_loop_metrics(
+        field_mT=field_mT,
+        moment_emu=moment_emu,
+        temperature_k=temperature_k,
+        branches=branches,
+        tail_mask=tail_mask,
+    )
+    direct_observables = _build_direct_observables(
+        field_mT=field_mT,
+        moment_emu=moment_emu,
+        branches=branches,
+        detailed_metrics=loop_metrics,
+    )
+    branch_asymmetry, branch_asymmetry_components = _compute_branch_asymmetry(
+        field_mT=field_mT,
+        moment_emu=moment_emu,
+        branches=branches,
+        detailed_metrics=loop_metrics,
+    )
+    loop_closure_error, loop_closure_components = _compute_loop_closure_error(
+        field_mT=field_mT,
+        moment_emu=moment_emu,
+        branches=branches,
+        positive_tail_indices=positive_tail_indices,
+        negative_tail_indices=negative_tail_indices,
+    )
+    coercive_ambiguity_count, coercive_ambiguity_components = _compute_coercive_crossing_ambiguity(
+        field_mT=field_mT,
+        moment_emu=moment_emu,
+        branches=branches,
+        detailed_metrics=loop_metrics,
+    )
+
+    full_moment_span = max(float(np.max(moment_emu) - np.min(moment_emu)), 1e-18)
+    positive_plateau_slope = _slope_from_indices(field_mT, moment_emu, np.asarray(positive_tail_indices, dtype=int))
+    negative_plateau_slope = _slope_from_indices(field_mT, moment_emu, np.asarray(negative_tail_indices, dtype=int))
+    H_max_mT = max(float(np.max(np.abs(field_mT))), 1e-18)
+    Ms_reference_emu = loop_metrics.get("saturation_moment_mean_abs_emu")
+    Ms_reference_emu = float(Ms_reference_emu) if Ms_reference_emu is not None else 0.5 * full_moment_span
+    plateau_slope_scale = max(abs(Ms_reference_emu) / H_max_mT, 1e-18)
+    positive_plateau_slope_normalized = abs(positive_plateau_slope) / plateau_slope_scale
+    negative_plateau_slope_normalized = abs(negative_plateau_slope) / plateau_slope_scale
+    positive_flatness_ratio = abs(positive_plateau_slope) * max(
+        float(np.ptp(field_mT[np.asarray(positive_tail_indices, dtype=int)])) if np.size(positive_tail_indices) else 0.0,
+        1.0,
+    ) / full_moment_span
+    negative_flatness_ratio = abs(negative_plateau_slope) * max(
+        float(np.ptp(field_mT[np.asarray(negative_tail_indices, dtype=int)])) if np.size(negative_tail_indices) else 0.0,
+        1.0,
+    ) / full_moment_span
+    plateau_flatness_ratio = max(positive_flatness_ratio, negative_flatness_ratio)
+    saturation_consistency_ratio = _relative_difference(
+        abs(loop_metrics.get("saturation_moment_positive_emu")) if loop_metrics.get("saturation_moment_positive_emu") is not None else None,
+        abs(loop_metrics.get("saturation_moment_negative_emu")) if loop_metrics.get("saturation_moment_negative_emu") is not None else None,
+    )
+    if max(abs(positive_plateau_slope_normalized), abs(negative_plateau_slope_normalized)) <= 1e-6:
+        tail_slope_symmetry_score = 1.0
+    else:
+        tail_slope_symmetry_score = float(
+            np.clip(
+                1.0
+                - _relative_difference(
+                    abs(positive_plateau_slope_normalized),
+                    abs(negative_plateau_slope_normalized),
+                ),
+                0.0,
+                1.0,
+            )
+        )
+    saturation_magnitude_symmetry_score = float(np.clip(1.0 - saturation_consistency_ratio, 0.0, 1.0))
+    switching_width_mT = _compute_switching_width(
+        positive_coercive_field_mT=loop_metrics.get("coercive_field_positive_mT"),
+        negative_coercive_field_mT=loop_metrics.get("coercive_field_negative_mT"),
+    )
+    switching_asymmetry_ratio = _relative_difference(
+        abs(loop_metrics.get("coercive_field_positive_mT")) if loop_metrics.get("coercive_field_positive_mT") is not None else None,
+        abs(loop_metrics.get("coercive_field_negative_mT")) if loop_metrics.get("coercive_field_negative_mT") is not None else None,
+    )
+    zero_crossing_candidate_count = int(
+        coercive_ambiguity_components.get("positive_branch_zero_crossing_candidates", 0)
+        + coercive_ambiguity_components.get("negative_branch_zero_crossing_candidates", 0)
+    )
+
+    return {
+        **loop_metrics,
+        **direct_observables,
+        "warnings": warnings,
+        "plateau_slope_positive_emu_per_mT": positive_plateau_slope,
+        "plateau_slope_negative_emu_per_mT": negative_plateau_slope,
+        "plateau_slope_positive_normalized": positive_plateau_slope_normalized,
+        "plateau_slope_negative_normalized": negative_plateau_slope_normalized,
+        "plateau_flatness_ratio_positive": positive_flatness_ratio,
+        "plateau_flatness_ratio_negative": negative_flatness_ratio,
+        "plateau_flatness_ratio": plateau_flatness_ratio,
+        "saturation_consistency_ratio": saturation_consistency_ratio,
+        "tail_slope_symmetry_score": tail_slope_symmetry_score,
+        "saturation_magnitude_symmetry_score": saturation_magnitude_symmetry_score,
+        "branch_asymmetry": branch_asymmetry,
+        "branch_asymmetry_components": branch_asymmetry_components,
+        "loop_closure_error": loop_closure_error,
+        "loop_closure_components": loop_closure_components,
+        "switching_width_mT": switching_width_mT,
+        "switching_asymmetry_ratio": switching_asymmetry_ratio,
+        "zero_crossing_candidate_count": zero_crossing_candidate_count,
+        "coercive_ambiguity_count": coercive_ambiguity_count,
+        "coercive_crossing_ambiguous": coercive_ambiguity_count > 0,
+        "coercive_ambiguity_components": coercive_ambiguity_components,
+    }
+
+
 def build_vsm_output_layers(
     *,
     field_mT: np.ndarray,
@@ -500,7 +627,10 @@ def _build_trust_diagnostics(
         "saturation_confidence_components": saturation_confidence_components,
         "background_fit_details": {
             "background_qc_passed": background_qc.get("passed"),
+            "background_mode": background_details.get("background_mode"),
             "background_subtraction_mode": background_details.get("subtraction_mode"),
+            "background_correction_accepted": background_details.get("correction_accepted"),
+            "background_decision_reason": background_details.get("decision_reason"),
             "background_slope_mean_emu_per_mT": background_details.get("slope_emu_per_mT"),
             "background_slope_positive_emu_per_mT": background_details.get("positive_slope_emu_per_mT"),
             "background_slope_negative_emu_per_mT": background_details.get("negative_slope_emu_per_mT"),
@@ -509,6 +639,49 @@ def _build_trust_diagnostics(
             "positive_tail_flatness_ratio": background_qc.get("positive_tail_flatness_ratio"),
             "negative_tail_flatness_ratio": background_qc.get("negative_tail_flatness_ratio"),
             "raw_tail_slope_disagreement_ratio": background_qc.get("raw_tail_slope_disagreement_ratio"),
+            "background_score_raw": background_qc.get("score_raw"),
+            "background_score_corrected": background_qc.get("score_corrected"),
+            "background_score_delta": background_qc.get("score_delta"),
+            "raw_plateau_slope_positive_normalized": background_qc.get("comparison", {}).get(
+                "raw_plateau_slope_positive_normalized"
+            ),
+            "raw_plateau_slope_negative_normalized": background_qc.get("comparison", {}).get(
+                "raw_plateau_slope_negative_normalized"
+            ),
+            "corrected_plateau_slope_positive_normalized": background_qc.get("comparison", {}).get(
+                "corrected_plateau_slope_positive_normalized"
+            ),
+            "corrected_plateau_slope_negative_normalized": background_qc.get("comparison", {}).get(
+                "corrected_plateau_slope_negative_normalized"
+            ),
+            "background_flatness_gain_positive": background_qc.get("comparison", {}).get(
+                "background_flatness_gain_positive"
+            ),
+            "background_flatness_gain_negative": background_qc.get("comparison", {}).get(
+                "background_flatness_gain_negative"
+            ),
+            "background_flatness_gain_score": background_qc.get("comparison", {}).get(
+                "background_flatness_gain_score"
+            ),
+            "background_tail_slope_symmetry_score": background_qc.get("comparison", {}).get(
+                "background_tail_slope_symmetry_score"
+            ),
+            "background_saturation_magnitude_symmetry_score": background_qc.get("comparison", {}).get(
+                "background_saturation_magnitude_symmetry_score"
+            ),
+            "raw_switching_width_mT": background_qc.get("comparison", {}).get("raw_switching_width_mT"),
+            "corrected_switching_width_mT": background_qc.get("comparison", {}).get(
+                "corrected_switching_width_mT"
+            ),
+            "background_switching_width_relative_change": background_qc.get("comparison", {}).get(
+                "background_switching_width_relative_change"
+            ),
+            "raw_zero_crossing_candidate_count": background_qc.get("comparison", {}).get(
+                "raw_zero_crossing_candidate_count"
+            ),
+            "corrected_zero_crossing_candidate_count": background_qc.get("comparison", {}).get(
+                "corrected_zero_crossing_candidate_count"
+            ),
             "positive_tail_point_count": len(background_details.get("selected_positive_indices", [])),
             "negative_tail_point_count": len(background_details.get("selected_negative_indices", [])),
         },
@@ -736,6 +909,85 @@ def _compute_branch_shape_mismatch(
     numerator = float(np.mean(np.abs(increasing_interp + decreasing_interp)))
     denominator = max(float(np.mean(np.abs(decreasing_interp - increasing_interp))), 1e-18)
     return float(np.clip(numerator / denominator, 0.0, 1.0))
+
+
+def _compute_loop_closure_error(
+    *,
+    field_mT: np.ndarray,
+    moment_emu: np.ndarray,
+    branches: list[BranchSegment],
+    positive_tail_indices: np.ndarray,
+    negative_tail_indices: np.ndarray,
+) -> tuple[float, dict[str, Any]]:
+    increasing_branch = _select_primary_branch(branches, "increasing")
+    decreasing_branch = _select_primary_branch(branches, "decreasing")
+    moment_span = max(float(np.max(moment_emu) - np.min(moment_emu)), 1e-18)
+    if increasing_branch is None or decreasing_branch is None:
+        return 1.0, {
+            "positive_tail_branch_mismatch": None,
+            "negative_tail_branch_mismatch": None,
+        }
+
+    positive_tail_branch_mismatch = _tail_branch_mismatch(
+        field_mT=field_mT,
+        moment_emu=moment_emu,
+        increasing_branch=increasing_branch,
+        decreasing_branch=decreasing_branch,
+        tail_indices=np.asarray(positive_tail_indices, dtype=int),
+        moment_span=moment_span,
+    )
+    negative_tail_branch_mismatch = _tail_branch_mismatch(
+        field_mT=field_mT,
+        moment_emu=moment_emu,
+        increasing_branch=increasing_branch,
+        decreasing_branch=decreasing_branch,
+        tail_indices=np.asarray(negative_tail_indices, dtype=int),
+        moment_span=moment_span,
+    )
+    return float(np.mean([positive_tail_branch_mismatch, negative_tail_branch_mismatch])), {
+        "positive_tail_branch_mismatch": positive_tail_branch_mismatch,
+        "negative_tail_branch_mismatch": negative_tail_branch_mismatch,
+    }
+
+
+def _compute_switching_width(
+    *,
+    positive_coercive_field_mT: float | None,
+    negative_coercive_field_mT: float | None,
+) -> float | None:
+    if positive_coercive_field_mT is None or negative_coercive_field_mT is None:
+        return None
+    return float(abs(float(positive_coercive_field_mT) - float(negative_coercive_field_mT)))
+
+
+def _compute_coercive_crossing_ambiguity(
+    *,
+    field_mT: np.ndarray,
+    moment_emu: np.ndarray,
+    branches: list[BranchSegment],
+    detailed_metrics: dict[str, Any],
+) -> tuple[int, dict[str, Any]]:
+    increasing_branch = _select_primary_branch(branches, "increasing")
+    decreasing_branch = _select_primary_branch(branches, "decreasing")
+
+    positive_candidates = 0
+    negative_candidates = 0
+    if increasing_branch is not None:
+        increasing_field, increasing_moment = _branch_arrays(field_mT, moment_emu, increasing_branch)
+        positive_candidates = _count_zero_crossing_candidates(increasing_field, increasing_moment)
+    if decreasing_branch is not None:
+        decreasing_field, decreasing_moment = _branch_arrays(field_mT, moment_emu, decreasing_branch)
+        negative_candidates = _count_zero_crossing_candidates(decreasing_field, decreasing_moment)
+
+    ambiguity_count = max(positive_candidates - 1, 0) + max(negative_candidates - 1, 0)
+    if detailed_metrics.get("coercive_field_positive_mT") is None:
+        ambiguity_count += 1
+    if detailed_metrics.get("coercive_field_negative_mT") is None:
+        ambiguity_count += 1
+    return int(ambiguity_count), {
+        "positive_branch_zero_crossing_candidates": positive_candidates,
+        "negative_branch_zero_crossing_candidates": negative_candidates,
+    }
 
 
 def _count_zero_crossing_candidates(x: np.ndarray, y: np.ndarray) -> int:
@@ -1040,3 +1292,46 @@ def _relative_difference(first: float | None, second: float | None) -> float:
         return 1.0
     denominator = max(abs(first), abs(second), 1e-18)
     return float(np.clip(abs(first - second) / denominator, 0.0, 1.0))
+
+
+def _tail_branch_mismatch(
+    *,
+    field_mT: np.ndarray,
+    moment_emu: np.ndarray,
+    increasing_branch: BranchSegment,
+    decreasing_branch: BranchSegment,
+    tail_indices: np.ndarray,
+    moment_span: float,
+) -> float:
+    if tail_indices.size == 0:
+        return 1.0
+
+    increasing_mask = _indices_in_branch(
+        tail_indices,
+        start_index=increasing_branch.start_index,
+        end_index=increasing_branch.end_index,
+    )
+    decreasing_mask = _indices_in_branch(
+        tail_indices,
+        start_index=decreasing_branch.start_index,
+        end_index=decreasing_branch.end_index,
+    )
+    if not np.any(increasing_mask) or not np.any(decreasing_mask):
+        return 1.0
+
+    increasing_mean = float(np.mean(moment_emu[tail_indices[increasing_mask]]))
+    decreasing_mean = float(np.mean(moment_emu[tail_indices[decreasing_mask]]))
+    return float(np.clip(abs(increasing_mean - decreasing_mean) / moment_span, 0.0, 1.0))
+
+
+def _indices_in_branch(indices: np.ndarray, *, start_index: int, end_index: int) -> np.ndarray:
+    indices = np.asarray(indices, dtype=int)
+    return (indices >= int(start_index)) & (indices <= int(end_index))
+
+
+def _slope_from_indices(field_mT: np.ndarray, moment_emu: np.ndarray, indices: np.ndarray) -> float:
+    indices = np.asarray(indices, dtype=int)
+    if indices.size < 2:
+        return 0.0
+    coefficients = np.polyfit(np.asarray(field_mT[indices], dtype=float), np.asarray(moment_emu[indices], dtype=float), deg=1)
+    return float(coefficients[0])

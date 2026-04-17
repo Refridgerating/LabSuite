@@ -108,8 +108,118 @@ def bruker_sample_stem(bruker_raw_dir: Path) -> Path:
 def vsm_sample_files(project_root: Path) -> list[Path]:
     matches = sorted((project_root / "data" / "raw").glob("MTJ-B-*.dat"))
     if not matches:
+        matches = sorted((project_root / "data" / "raw" / "VSM").glob("MTJ-B-*.dat"))
+    if not matches:
         pytest.skip("No VSM .dat files available in data/raw for acceptance testing.")
     return matches
+
+
+@pytest.fixture
+def build_vsm_loop_arrays():
+    def _build(
+        *,
+        max_field_mT: float = 100.0,
+        points_per_branch: int = 81,
+        ms_emu: float = 3.5e-5,
+        coercive_field_mT: float = 2.5,
+        transition_width_mT: float = 4.5,
+        background_slope_emu_per_mT: float = 0.0,
+        positive_tail_curvature_emu: float = 0.0,
+        negative_tail_curvature_emu: float = 0.0,
+        increasing_scale: float = 1.0,
+        decreasing_scale: float = 1.0,
+        final_branch_offset_emu: float = 0.0,
+        deterministic_noise_emu: float = 2.0e-7,
+        moment_std_err_emu: float = 4.0e-7,
+        temperature_K: float = 300.0,
+    ) -> dict[str, np.ndarray]:
+        branch_0 = np.linspace(-max_field_mT, max_field_mT, points_per_branch, dtype=float)
+        branch_1 = np.linspace(max_field_mT, -max_field_mT, points_per_branch, dtype=float)
+        branch_2 = np.linspace(-max_field_mT, max_field_mT, points_per_branch, dtype=float)
+        field_mT = np.concatenate([branch_0, branch_1[1:], branch_2[1:]])
+
+        branch_ids = np.concatenate(
+            [
+                np.zeros(branch_0.size, dtype=int),
+                np.ones(branch_1.size - 1, dtype=int),
+                np.full(branch_2.size - 1, 2, dtype=int),
+            ]
+        )
+        decreasing_mask = branch_ids == 1
+        increasing_mask = ~decreasing_mask
+
+        moment_emu = np.zeros_like(field_mT)
+        moment_emu[increasing_mask] = increasing_scale * ms_emu * np.tanh(
+            (field_mT[increasing_mask] - coercive_field_mT) / transition_width_mT
+        )
+        moment_emu[decreasing_mask] = decreasing_scale * ms_emu * np.tanh(
+            (field_mT[decreasing_mask] + coercive_field_mT) / transition_width_mT
+        )
+
+        normalized_field = field_mT / max(max_field_mT, 1e-9)
+        positive_tail_component = positive_tail_curvature_emu * np.where(field_mT > 0.0, normalized_field**2, 0.0)
+        negative_tail_component = negative_tail_curvature_emu * np.where(field_mT < 0.0, normalized_field**2, 0.0)
+        deterministic_noise = deterministic_noise_emu * np.sin(np.linspace(0.0, 6.0 * np.pi, field_mT.size))
+
+        moment_emu = (
+            moment_emu
+            + background_slope_emu_per_mT * field_mT
+            + positive_tail_component
+            + negative_tail_component
+            + deterministic_noise
+        )
+        moment_emu[branch_ids == 2] += final_branch_offset_emu
+
+        return {
+            "field_mT": np.asarray(field_mT, dtype=float),
+            "field_oe": np.asarray(field_mT * 10.0, dtype=float),
+            "moment_emu": np.asarray(moment_emu, dtype=float),
+            "moment_std_err_emu": np.full(field_mT.size, moment_std_err_emu, dtype=float),
+            "temperature_k": np.full(field_mT.size, temperature_K, dtype=float),
+            "branch_id": np.asarray(branch_ids, dtype=int),
+        }
+
+    return _build
+
+
+@pytest.fixture
+def write_vsm_sample(build_vsm_loop_arrays):
+    def _write(
+        path: Path,
+        *,
+        sample_stem: str = "Synthetic-300K-R1_00001",
+        **loop_kwargs,
+    ) -> Path:
+        loop = build_vsm_loop_arrays(**loop_kwargs)
+        dat_path = path if path.suffix.lower() == ".dat" else path / f"{sample_stem}.dat"
+        dat_path.parent.mkdir(parents=True, exist_ok=True)
+
+        header_lines = [
+            "[Header]",
+            "TITLE,",
+            "INFO,Synthetic VSM Fixture,APPNAME",
+            "BYAPP,VSM,2.0,1.0",
+            "[Data]",
+            "Comment,Time Stamp (sec),Temperature (K),Magnetic Field (Oe),Moment (emu),M. Std. Err. (emu)",
+        ]
+        data_lines = []
+        for index in range(loop["field_mT"].size):
+            data_lines.append(
+                ",".join(
+                    [
+                        "",
+                        f"{float(index):.6f}",
+                        f"{float(loop['temperature_k'][index]):.6f}",
+                        f"{float(loop['field_oe'][index]):.12g}",
+                        f"{float(loop['moment_emu'][index]):.12g}",
+                        f"{float(loop['moment_std_err_emu'][index]):.12g}",
+                    ]
+                )
+            )
+        dat_path.write_text("\n".join([*header_lines, *data_lines, ""]), encoding="utf-8")
+        return dat_path
+
+    return _write
 
 
 @pytest.fixture

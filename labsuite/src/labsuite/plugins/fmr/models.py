@@ -157,6 +157,7 @@ class FmrTraceFitResult:
     double_fit: FmrTraceModelResult | None = None
     selected_components: list[FmrComponentFitResult] = field(default_factory=list)
     partial_component_qc: bool = False
+    r_squared: float | None = None
     signal_max_abs: float | None = None
     residual_rmse_fraction: float | None = None
     amplitude_snr: float | None = None

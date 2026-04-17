@@ -39,13 +39,18 @@ def test_vsm_single_exports_all_artifacts(tmp_path, project_root, vsm_sample_fil
     assert payload["measurement"]["modality"] == "vsm"
     assert payload["summary_metrics"]["sample_id"] == "MTJ-B"
     assert payload["analysis_payload"]["background_fit"]["combined_background"]["slope_emu_per_mT"] is not None
-    assert payload["analysis_payload"]["background_fit"]["combined_background"]["subtraction_mode"] == "slope_only_split_tails"
+    assert payload["analysis_payload"]["background_fit"]["combined_background"]["background_mode"] in {
+        "none",
+        "slope_only",
+        "rejected",
+    }
     assert payload["analysis_payload"]["background_fit"]["positive_tail_fit"]["parameters"]["slope_emu_per_mT"] is not None
     assert payload["analysis_payload"]["background_fit"]["negative_tail_fit"]["parameters"]["slope_emu_per_mT"] is not None
     assert payload["analysis_payload"]["centering"]["applied"] is False
     assert len(payload["analysis_payload"]["branches"]) >= 3
     assert payload["plot_manifest"]["figure_type"] == "vsm_loop_diagnostic"
-    assert payload["summary_metrics"]["background_subtraction_mode"] == "slope_only_split_tails"
+    assert payload["summary_metrics"]["background_mode"] in {"none", "slope_only", "rejected"}
+    assert payload["summary_metrics"]["background_subtraction_mode"] == payload["summary_metrics"]["background_mode"]
     assert payload["summary_metrics"]["Ms_emu"] is not None
     assert payload["summary_metrics"]["Mr_emu"] is not None
     assert payload["summary_metrics"]["Hc_mT"] is not None
@@ -61,12 +66,15 @@ def test_vsm_single_exports_all_artifacts(tmp_path, project_root, vsm_sample_fil
     assert "direct_observables" in payload["analysis_payload"]
     assert "trust_diagnostics" in payload["analysis_payload"]
     assert "uncertainty_estimates" in payload["analysis_payload"]
+    assert "uncorrected" in payload["analysis_payload"]["metrics"]
+    assert "corrected_candidate" in payload["analysis_payload"]["metrics"]
+    assert "final" in payload["analysis_payload"]["metrics"]
 
     header = csv_path.read_text(encoding="utf-8").splitlines()[0]
     assert header == (
         "acquisition_index,raw_field_oe,field_mT,raw_moment_emu,processed_moment_emu,"
-        "corrected_moment_emu,background_fit_emu,positive_tail_fit_emu,negative_tail_fit_emu,branch_id,branch_direction,temperature_k,"
-        "moment_std_err_emu,final_field_mT,final_moment_emu"
+        "uncorrected_moment_emu,slope_corrected_moment_emu,background_fit_emu,positive_tail_fit_emu,negative_tail_fit_emu,"
+        "branch_id,branch_direction,temperature_k,moment_std_err_emu,selected_moment_emu,final_field_mT,final_moment_emu"
     )
     summary_header = summary_path.read_text(encoding="utf-8").splitlines()[0]
     assert "Ms_emu" in summary_header
@@ -89,13 +97,33 @@ def test_vsm_single_exports_all_artifacts(tmp_path, project_root, vsm_sample_fil
     assert "background_slope_emu_per_mT" in summary_header
     assert "background_slope_positive_emu_per_mT" in summary_header
     assert "background_slope_negative_emu_per_mT" in summary_header
+    assert "background_mode" in summary_header
     assert "background_subtraction_mode" in summary_header
+    assert "background_correction_accepted" in summary_header
+    assert "background_decision_reason" in summary_header
     assert "background_qc_passed" in summary_header
+    assert "background_flatness_gain_score" in summary_header
+    assert "background_flatness_gain_balance_score" in summary_header
+    assert "background_flatness_gain_balance_ok" in summary_header
+    assert "background_soft_override_passed" in summary_header
+    assert "background_tail_slope_symmetry_score" in summary_header
+    assert "background_saturation_magnitude_symmetry_score" in summary_header
+    assert "positive_tail_fit_r_squared_soft_warning" in summary_header
+    assert "positive_tail_fit_r_squared_catastrophic" in summary_header
+    assert "tail_window_selection_mode" in summary_header
+    assert "positive_tail_window_selected_point_count" in summary_header
+    assert "positive_tail_window_soft_r_squared_rescue_attempted" in summary_header
+    assert "positive_tail_window_rescue_changed_selection" in summary_header
+    assert "raw_plateau_slope_positive_normalized" in summary_header
+    assert "corrected_plateau_slope_negative_normalized" in summary_header
+    assert "raw_switching_width_mT" in summary_header
+    assert "corrected_zero_crossing_candidate_count" in summary_header
+    assert "background_score_delta" in summary_header
     assert "centering_field_offset_mT" in summary_header
     assert "warnings" in summary_header
 
 
-def test_vsm_batch_export_and_report_workflows(tmp_path, project_root, vsm_sample_files) -> None:
+def test_vsm_batch_export_and_report_workflows(tmp_path, project_root, vsm_sample_files, capsys) -> None:
     source_dir = vsm_sample_files[0].parent
     recipe_path = project_root / "recipes" / "vsm" / "default.yaml"
     batch_dir = tmp_path / "vsm_batch"
@@ -117,10 +145,18 @@ def test_vsm_batch_export_and_report_workflows(tmp_path, project_root, vsm_sampl
     assert exit_code == 0
     assert (batch_dir / "batch_summary.csv").exists()
     assert (batch_dir / "batch_manifest.json").exists()
+    assert (batch_dir / "batch_hysteresis_overlay.png").exists()
+    assert (batch_dir / "batch_hysteresis_overlay.png").stat().st_size > 0
+    output = capsys.readouterr().out
+    assert f"Batch figure [batch_hysteresis_overlay]: {batch_dir / 'batch_hysteresis_overlay.png'}" in output
 
     manifest = json.loads((batch_dir / "batch_manifest.json").read_text(encoding="utf-8"))
     assert manifest["succeeded_count"] == len(vsm_sample_files)
     assert manifest["failed_count"] == 0
+    assert manifest["batch_figures"] == {
+        "batch_hysteresis_overlay": str((batch_dir / "batch_hysteresis_overlay.png").resolve())
+    }
+    assert manifest["batch_figure_png"] == str((batch_dir / "batch_hysteresis_overlay.png").resolve())
 
     first_json = batch_dir / vsm_sample_files[0].stem / f"{vsm_sample_files[0].stem}_analysis.json"
     export_dir = tmp_path / "vsm_export"
@@ -155,7 +191,12 @@ def test_vsm_batch_export_and_report_workflows(tmp_path, project_root, vsm_sampl
     report_text = single_report.read_text(encoding="utf-8")
     assert "Direct Observables" in report_text
     assert "Trust Diagnostics" in report_text
+    assert "Secondary Diagnostics" in report_text
     assert "+/-" in report_text
+    assert "Background mode" in report_text
+    assert "Tail selection mode" in report_text
+    assert "Tail fit R^2" in report_text
+    assert "Flatness gain balance" in report_text
 
     batch_report = tmp_path / "batch_report.md"
     exit_code = main(
@@ -225,7 +266,8 @@ def test_vsm_batch_summary_contains_grouping_metadata(tmp_path, project_root, vs
     assert len(rows) == len(vsm_sample_files)
     assert all(row["sample_id"] == "MTJ-B" for row in rows)
     assert all(row["replicate_id"] == "R1" for row in rows)
-    assert all(row["background_subtraction_mode"] == "slope_only_split_tails" for row in rows)
+    assert all(row["background_mode"] in {"none", "slope_only", "rejected"} for row in rows)
+    assert all(row["background_subtraction_mode"] == row["background_mode"] for row in rows)
     assert all(row["Ms_emu"] for row in rows)
     assert all(row["ms_error"] for row in rows)
     assert all(row["saturation_confidence"] for row in rows)

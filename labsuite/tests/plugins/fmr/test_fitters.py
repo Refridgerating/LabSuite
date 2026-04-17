@@ -33,11 +33,13 @@ def test_fit_fmr_trace_keeps_single_mode_for_single_resonance() -> None:
     result = fit_fmr_trace(raw_trace, processed_trace, FmrRecipe())
     accepted, rejection_reason, warnings = assess_trace_fit_quality(result, recipe=FmrRecipe())
     assert result.selected_mode == "single"
+    assert result.r_squared is not None
     assert len(result.selected_components) == 1
     assert result.selected_components[0].component_label == "single_unassigned"
     assert accepted is True
     assert rejection_reason is None
     assert warnings == []
+    assert "r_squared" not in result.acceptance_checks
 
 
 def test_fit_fmr_trace_selects_double_mode_for_two_resonance_trace() -> None:
@@ -46,6 +48,7 @@ def test_fit_fmr_trace_selects_double_mode_for_two_resonance_trace() -> None:
     accepted, rejection_reason, _warnings = assess_trace_fit_quality(result, recipe=FmrRecipe())
     centers = [component.H_res_mT for component in result.selected_components]
     assert result.selected_mode == "double"
+    assert result.r_squared is not None
     assert [component.component_label for component in result.selected_components] == ["mode_1", "mode_2"]
     assert centers[0] < centers[1]
     assert accepted is True

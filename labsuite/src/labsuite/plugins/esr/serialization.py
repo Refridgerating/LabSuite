@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+import re
 from typing import Any
 
+import matplotlib.pyplot as plt
 import numpy as np
 
 from labsuite.core.types import (
@@ -102,6 +104,56 @@ def build_esr_report(input_path: Path, output_path: Path | None = None, *, recur
     destination = output_path.resolve() if output_path is not None else resolved_input / "batch_report.md"
     destination.write_text(_build_batch_report(payloads), encoding="utf-8")
     return destination
+
+
+def export_esr_batch_overlay_figure(
+    analyses: list[AnalysisResult],
+    output_dir: Path,
+) -> dict[str, Path]:
+    """Export ESR batch figures grouped by replicate and ordered by angle."""
+
+    if not analyses:
+        return {}
+
+    grouped_entries: dict[str, list[dict[str, Any]]] = {}
+    for analysis in analyses:
+        filename_tokens = _parse_esr_filename_tokens(analysis.dataset.source_path)
+        replicate_id = filename_tokens["replicate_id"] or "UNGROUPED"
+        grouped_entries.setdefault(replicate_id, []).append(
+            {
+                "analysis": analysis,
+                "source_stem": filename_tokens["source_stem"],
+                "angle_deg": filename_tokens["angle_deg"],
+                "label": _esr_angle_display_label(filename_tokens),
+            }
+        )
+
+    exported_paths: dict[str, Path] = {}
+    for replicate_id, entries in sorted(grouped_entries.items(), key=lambda item: _esr_replicate_sort_key(item[0])):
+        ordered_entries = sorted(
+            entries,
+            key=lambda entry: (
+                float("inf") if entry["angle_deg"] is None else float(entry["angle_deg"]),
+                str(entry["source_stem"]).lower(),
+            ),
+        )
+        offset_path = output_dir / f"batch_processed_offset_{replicate_id}.png"
+        overlay_path = output_dir / f"batch_angle_overlay_{replicate_id}.png"
+        _export_esr_group_figure(
+            ordered_entries,
+            replicate_id=replicate_id,
+            destination=offset_path,
+            plot_mode="offset",
+        )
+        _export_esr_group_figure(
+            ordered_entries,
+            replicate_id=replicate_id,
+            destination=overlay_path,
+            plot_mode="overlay",
+        )
+        exported_paths[f"batch_processed_offset_{replicate_id}"] = offset_path
+        exported_paths[f"batch_angle_overlay_{replicate_id}"] = overlay_path
+    return exported_paths
 
 
 def _load_fit_result(payload: dict[str, Any] | None) -> FitResult | None:
@@ -254,3 +306,107 @@ def _build_batch_report(payloads: list[dict[str, Any]]) -> str:
             + " |"
         )
     return "\n".join(lines) + "\n"
+
+
+def _export_esr_group_figure(
+    entries: list[dict[str, Any]],
+    *,
+    replicate_id: str,
+    destination: Path,
+    plot_mode: str,
+) -> None:
+    figure, axis = plt.subplots(1, 1, figsize=(12.0, 7.5))
+    colors = plt.cm.plasma(np.linspace(0.08, 0.92, max(len(entries), 1)))
+    offset_step = _esr_overlay_offset_step([entry["analysis"] for entry in entries])
+
+    for index, entry in enumerate(entries):
+        analysis = entry["analysis"]
+        processed_signal = np.asarray(analysis.processed.signal, dtype=float)
+        field_mT = np.asarray(analysis.processed.field_mT, dtype=float)
+        plotted_signal = processed_signal if plot_mode == "overlay" else processed_signal + index * offset_step
+        axis.plot(
+            field_mT,
+            plotted_signal,
+            color=colors[index],
+            linewidth=1.3,
+            label=entry["label"],
+        )
+
+    axis.set_title(_esr_group_title(replicate_id, plot_mode))
+    axis.set_xlabel("Field (mT)")
+    axis.set_ylabel("Processed derivative" if plot_mode == "overlay" else "Processed derivative + offset")
+    axis.grid(alpha=0.2)
+    _place_esr_group_legend(figure, axis, len(entries))
+    figure.tight_layout(rect=(0.03, 0.12, 0.98, 0.98))
+    figure.savefig(destination, dpi=200)
+    plt.close(figure)
+
+
+def _place_esr_group_legend(figure, axis, entry_count: int) -> None:
+    handles, labels = axis.get_legend_handles_labels()
+    if not handles:
+        return
+    ncols = min(4, max(1, entry_count))
+    figure.legend(
+        handles,
+        labels,
+        loc="lower center",
+        bbox_to_anchor=(0.5, 0.01),
+        ncols=ncols,
+        frameon=True,
+    )
+
+
+def _esr_overlay_offset_step(analyses: list[AnalysisResult]) -> float:
+    amplitudes: list[float] = []
+    for analysis in analyses:
+        processed_signal = np.asarray(analysis.processed.signal, dtype=float)
+        if processed_signal.size == 0:
+            continue
+        span = float(np.nanmax(processed_signal) - np.nanmin(processed_signal))
+        if np.isfinite(span) and span > 0.0:
+            amplitudes.append(span)
+    if not amplitudes:
+        return 1.0
+    return max(amplitudes) * 1.2
+
+
+def _parse_esr_filename_tokens(path: Path) -> dict[str, Any]:
+    stem = path.stem.split(" - ", maxsplit=1)[0].strip()
+    parts = [part for part in stem.split("-") if part]
+    replicate_id: str | None = None
+    angle_deg: float | None = None
+    for part in parts:
+        if replicate_id is None and re.fullmatch(r"R\d+", part, flags=re.IGNORECASE):
+            replicate_id = part.upper()
+            continue
+        angle_match = re.fullmatch(r"(-?\d+(?:[.,]\d+)?)deg", part, flags=re.IGNORECASE)
+        if angle_deg is None and angle_match is not None:
+            angle_deg = float(angle_match.group(1).replace(",", "."))
+    return {
+        "source_stem": stem,
+        "replicate_id": replicate_id,
+        "angle_deg": angle_deg,
+    }
+
+
+def _esr_angle_display_label(filename_tokens: dict[str, Any]) -> str:
+    angle_deg = filename_tokens["angle_deg"]
+    if angle_deg is None:
+        return str(filename_tokens["source_stem"])
+    if float(angle_deg).is_integer():
+        return f"{int(angle_deg)} deg"
+    return f"{angle_deg:.3g} deg"
+
+
+def _esr_group_title(replicate_id: str, plot_mode: str) -> str:
+    if plot_mode == "overlay":
+        return f"ESR Angle Overlay ({replicate_id})"
+    return f"ESR Processed Derivative Offset ({replicate_id})"
+
+
+def _esr_replicate_sort_key(replicate_id: str) -> tuple[int, str]:
+    match = re.fullmatch(r"R(\d+)", replicate_id, flags=re.IGNORECASE)
+    if match is None:
+        return (1_000_000, replicate_id.lower())
+    return (int(match.group(1)), replicate_id.lower())

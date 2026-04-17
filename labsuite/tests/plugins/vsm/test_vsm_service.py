@@ -21,10 +21,22 @@ def test_analyze_vsm_file_extracts_filename_metadata_and_metrics(project_root, v
     assert result.summary_metrics["background_slope_positive_emu_per_mT"] is not None
     assert result.summary_metrics["background_slope_negative_emu_per_mT"] is not None
     assert result.summary_metrics["background_intercept_emu"] is not None
-    assert result.summary_metrics["background_subtraction_mode"] == "slope_only_split_tails"
-    assert result.summary_metrics["Ms_emu"] == result.summary_metrics["saturation_moment_mean_abs_emu"]
-    assert result.summary_metrics["Mr_emu"] == result.summary_metrics["remanence_mean_abs_emu"]
-    assert result.summary_metrics["Hc_mT"] == result.summary_metrics["coercive_field_mean_abs_mT"]
+    assert result.summary_metrics["background_mode"] in {"none", "slope_only", "rejected"}
+    assert result.summary_metrics["background_subtraction_mode"] == result.summary_metrics["background_mode"]
+    assert result.summary_metrics["background_correction_accepted"] == (
+        result.summary_metrics["background_mode"] == "slope_only"
+    )
+    assert result.summary_metrics["background_decision_reason"] is not None
+    assert result.summary_metrics["background_flatness_gain_score"] is not None
+    assert result.summary_metrics["background_flatness_gain_balance_score"] is not None
+    assert result.summary_metrics["background_tail_slope_symmetry_score"] is not None
+    assert result.summary_metrics["background_saturation_magnitude_symmetry_score"] is not None
+    assert result.summary_metrics["tail_window_selection_mode"] == "iterative_shrink"
+    assert result.summary_metrics["positive_tail_window_initial_point_count"] >= result.summary_metrics["positive_tail_window_selected_point_count"]
+    assert result.summary_metrics["negative_tail_window_initial_point_count"] >= result.summary_metrics["negative_tail_window_selected_point_count"]
+    assert result.summary_metrics["Ms_emu"] == result.analysis_payload["metrics"]["final"]["Ms_emu"]
+    assert result.summary_metrics["Mr_emu"] == result.analysis_payload["metrics"]["final"]["Mr_emu"]
+    assert result.summary_metrics["Hc_mT"] == result.analysis_payload["metrics"]["final"]["Hc_mT"]
     assert result.summary_metrics["exchange_bias_mT"] == result.summary_metrics["loop_shift_mT"]
     assert result.summary_metrics["loop_area_emu_mT"] is not None
     assert result.summary_metrics["loop_area_emu_mT"] > 0.0
@@ -45,29 +57,47 @@ def test_analyze_vsm_file_extracts_filename_metadata_and_metrics(project_root, v
     assert isinstance(result.summary_metrics["ambiguity_flags"], list)
     assert result.summary_metrics["centering_applied"] is False
     assert result.summary_metrics["temperature_k"] is not None
+
     background_fit = result.analysis_payload["background_fit"]
     combined_background = background_fit["combined_background"]
     assert background_fit["positive_tail_fit"].selected_indices
     assert background_fit["negative_tail_fit"].selected_indices
-    assert np.all(np.asarray(result.analysis_payload["raw_data"]["field_mT"], dtype=float)[background_fit["positive_tail_fit"].selected_indices] > 0.0)
-    assert np.all(np.asarray(result.analysis_payload["raw_data"]["field_mT"], dtype=float)[background_fit["negative_tail_fit"].selected_indices] < 0.0)
+    assert np.all(
+        np.asarray(result.analysis_payload["raw_data"]["field_mT"], dtype=float)[background_fit["positive_tail_fit"].selected_indices] > 0.0
+    )
+    assert np.all(
+        np.asarray(result.analysis_payload["raw_data"]["field_mT"], dtype=float)[background_fit["negative_tail_fit"].selected_indices] < 0.0
+    )
     expected_mean_slope = (
         result.summary_metrics["background_slope_positive_emu_per_mT"]
         + result.summary_metrics["background_slope_negative_emu_per_mT"]
     ) / 2.0
     assert np.isclose(result.summary_metrics["background_slope_emu_per_mT"], expected_mean_slope)
-    assert len(result.analysis_payload["processed_data"]["corrected_moment_emu"]) == result.summary_metrics["point_count"]
-    assert np.any(
-        np.asarray(result.analysis_payload["processed_data"]["corrected_moment_emu"], dtype=float)
-        != np.asarray(result.analysis_payload["raw_data"]["moment_emu"], dtype=float)
-    )
     processed = np.asarray(result.analysis_payload["processed_data"]["processed_moment_emu"], dtype=float)
+    uncorrected = np.asarray(result.analysis_payload["processed_data"]["uncorrected_moment_emu"], dtype=float)
     field = np.asarray(result.analysis_payload["raw_data"]["field_mT"], dtype=float)
-    corrected = np.asarray(result.analysis_payload["processed_data"]["corrected_moment_emu"], dtype=float)
-    assert np.allclose(corrected, processed - result.summary_metrics["background_slope_emu_per_mT"] * field)
+    slope_corrected = np.asarray(result.analysis_payload["processed_data"]["slope_corrected_moment_emu"], dtype=float)
+    selected = np.asarray(result.analysis_payload["processed_data"]["selected_moment_emu"], dtype=float)
+    assert np.allclose(uncorrected, processed)
+    assert np.allclose(slope_corrected, processed - result.summary_metrics["background_slope_emu_per_mT"] * field)
+    if result.summary_metrics["background_mode"] == "slope_only":
+        assert np.allclose(selected, slope_corrected)
+    else:
+        assert np.allclose(selected, uncorrected)
     assert combined_background["used_intercept_in_correction"] is False
     assert combined_background["qc"]["corrected_positive_tail_slope_emu_per_mT"] is not None
     assert combined_background["qc"]["corrected_negative_tail_slope_emu_per_mT"] is not None
+    assert "raw_metrics" in combined_background["qc"]
+    assert "corrected_candidate_metrics" in combined_background["qc"]
+    assert "raw_plateau_slope_positive_normalized" in combined_background["qc"]["comparison"]
+    assert "background_flatness_gain_score" in combined_background["qc"]["comparison"]
+    assert "raw_switching_width_mT" in combined_background["qc"]["comparison"]
+    assert "corrected_zero_crossing_candidate_count" in combined_background["qc"]["comparison"]
+    assert "tail_window_selection_mode" in combined_background["qc"]
+    assert "positive_tail_fit_r_squared_soft_warning" in combined_background["qc"]
+    assert "positive_tail_window_selected_point_count" in combined_background["qc"]
+    assert "background_flatness_gain_balance_score" in combined_background["qc"]["comparison"]
+    assert "positive_tail_window_soft_r_squared_rescue_attempted" in combined_background["qc"]
     assert np.isclose(
         result.summary_metrics["squareness"],
         result.summary_metrics["Mr_emu"] / result.summary_metrics["Ms_emu"],
@@ -105,3 +135,114 @@ def test_analyze_vsm_file_persists_centering_diagnostics(project_root, vsm_sampl
     assert "ambiguity_flags" in result.analysis_payload["trust_diagnostics"]
     assert "uncertainty_flags" in result.analysis_payload["uncertainty_estimates"]
     assert "instrument_noise_fallback_used" in result.analysis_payload["uncertainty_estimates"]
+
+
+def test_analyze_vsm_file_background_mode_none_for_negligible_slope(tmp_path, project_root, write_vsm_sample) -> None:
+    source_file = write_vsm_sample(tmp_path, sample_stem="SyntheticNone-300K-R1_00001", background_slope_emu_per_mT=0.0)
+    recipe_path = project_root / "recipes" / "vsm" / "default.yaml"
+
+    result = analyze_vsm_file(source_file, recipe_path)
+
+    assert result.summary_metrics["background_mode"] == "none"
+    assert result.summary_metrics["background_correction_accepted"] is False
+    assert result.summary_metrics["background_decision_reason"] == "slope_below_meaningful_threshold"
+    assert result.summary_metrics["background_flatness_gain_score"] is not None
+    assert np.allclose(
+        np.asarray(result.analysis_payload["processed_data"]["selected_moment_emu"], dtype=float),
+        np.asarray(result.analysis_payload["processed_data"]["uncorrected_moment_emu"], dtype=float),
+    )
+    assert result.analysis_payload["metrics"]["corrected_candidate"]["Ms_emu"] is not None
+
+
+def test_analyze_vsm_file_background_mode_slope_only_for_clean_linear_background(
+    tmp_path,
+    project_root,
+    write_vsm_sample,
+) -> None:
+    source_file = write_vsm_sample(
+        tmp_path,
+        sample_stem="SyntheticSlope-300K-R1_00001",
+        background_slope_emu_per_mT=2.0e-7,
+    )
+    recipe_path = project_root / "recipes" / "vsm" / "default.yaml"
+
+    result = analyze_vsm_file(source_file, recipe_path)
+
+    assert result.summary_metrics["background_mode"] == "slope_only"
+    assert result.summary_metrics["background_correction_accepted"] is True
+    assert result.summary_metrics["background_score_delta"] >= 0.0
+    assert result.summary_metrics["background_flatness_gain_score"] >= 0.0
+    assert result.summary_metrics["background_flatness_gain_balance_score"] >= 0.0
+    assert np.allclose(
+        np.asarray(result.analysis_payload["processed_data"]["selected_moment_emu"], dtype=float),
+        np.asarray(result.analysis_payload["processed_data"]["slope_corrected_moment_emu"], dtype=float),
+    )
+    assert not np.allclose(
+        np.asarray(result.analysis_payload["processed_data"]["selected_moment_emu"], dtype=float),
+        np.asarray(result.analysis_payload["processed_data"]["uncorrected_moment_emu"], dtype=float),
+    )
+
+
+def test_analyze_vsm_file_adaptive_tail_window_can_keep_slope_only_on_curved_tails(
+    tmp_path,
+    project_root,
+    write_vsm_sample,
+) -> None:
+    source_file = write_vsm_sample(
+        tmp_path,
+        sample_stem="SyntheticAdaptive-300K-R1_00001",
+        background_slope_emu_per_mT=2.0e-7,
+        positive_tail_curvature_emu=1.5e-5,
+        negative_tail_curvature_emu=-1.5e-5,
+    )
+    recipe_path = project_root / "recipes" / "vsm" / "default.yaml"
+
+    result = analyze_vsm_file(source_file, recipe_path)
+
+    assert result.summary_metrics["background_mode"] == "slope_only"
+    assert result.summary_metrics["positive_tail_window_selected_point_count"] < result.summary_metrics["positive_tail_window_initial_point_count"]
+    assert result.summary_metrics["negative_tail_window_selected_point_count"] < result.summary_metrics["negative_tail_window_initial_point_count"]
+    assert result.summary_metrics["positive_tail_fit_r_squared_soft_warning"] is False
+    assert result.summary_metrics["negative_tail_fit_r_squared_soft_warning"] is False
+
+
+def test_analyze_vsm_file_soft_warning_override_exposes_rescue_diagnostics(
+    project_root,
+    vsm_sample_files,
+) -> None:
+    source_file = vsm_sample_files[0]
+    recipe_path = project_root / "recipes" / "vsm" / "default.yaml"
+
+    result = analyze_vsm_file(source_file, recipe_path)
+
+    assert result.summary_metrics["background_flatness_gain_balance_score"] is not None
+    assert result.summary_metrics["background_soft_override_passed"] in {True, False}
+    assert result.summary_metrics["positive_tail_window_soft_r_squared_rescue_attempted"] in {True, False}
+    assert result.summary_metrics["negative_tail_window_soft_r_squared_rescue_attempted"] in {True, False}
+    assert result.summary_metrics["positive_tail_window_rescue_changed_selection"] in {True, False}
+    assert result.summary_metrics["negative_tail_window_rescue_changed_selection"] in {True, False}
+
+
+def test_analyze_vsm_file_background_mode_rejected_for_bad_tail_fit(tmp_path, project_root, write_vsm_sample) -> None:
+    source_file = write_vsm_sample(
+        tmp_path,
+        sample_stem="SyntheticRejected-300K-R1_00001",
+        background_slope_emu_per_mT=2.0e-7,
+        positive_tail_curvature_emu=5.0e-5,
+        negative_tail_curvature_emu=-5.0e-5,
+    )
+    recipe_path = project_root / "recipes" / "vsm" / "default.yaml"
+
+    result = analyze_vsm_file(source_file, recipe_path)
+
+    assert result.summary_metrics["background_mode"] == "rejected"
+    assert result.summary_metrics["background_correction_accepted"] is False
+    assert result.summary_metrics["background_qc_passed"] is False
+    assert result.summary_metrics["background_decision_reason"] == "corrected_zero_crossings_increased"
+    assert result.summary_metrics["corrected_zero_crossing_candidate_count"] >= result.summary_metrics["raw_zero_crossing_candidate_count"]
+    assert np.allclose(
+        np.asarray(result.analysis_payload["processed_data"]["selected_moment_emu"], dtype=float),
+        np.asarray(result.analysis_payload["processed_data"]["uncorrected_moment_emu"], dtype=float),
+    )
+    assert result.analysis_payload["metrics"]["corrected_candidate"]["plateau_flatness_ratio"] is not None
+    assert result.summary_metrics["positive_tail_fit_r_squared_catastrophic"] is False

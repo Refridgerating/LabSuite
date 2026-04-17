@@ -75,9 +75,9 @@ def test_run_esr_batch_workflow_writes_per_file_outputs_and_aggregate_artifacts(
 ) -> None:
     source_dir = tmp_path / "raw"
     source_dir.mkdir()
-    first = write_bruker_esr_sample(source_dir / "alpha_trace.dsc")
+    first = write_bruker_esr_sample(source_dir / "sample-0deg-R1.dsc")
     second = write_bruker_esr_sample(
-        source_dir / "beta_trace.dsc",
+        source_dir / "sample-45deg-R1.dsc",
         components=[
             {"amplitude": 1.0, "center_mT": 335.0, "gamma_mT": 0.8, "offset": 0.0},
             {"amplitude": 0.9, "center_mT": 345.0, "gamma_mT": 0.9, "offset": 0.0},
@@ -100,6 +100,12 @@ def test_run_esr_batch_workflow_writes_per_file_outputs_and_aggregate_artifacts(
     assert len(result.failed_items) == 0
     assert result.summary_csv_path.exists()
     assert result.manifest_json_path.exists()
+    assert result.batch_figure_paths == {
+        "batch_angle_overlay_R1": output_dir / "batch_angle_overlay_R1.png",
+        "batch_processed_offset_R1": output_dir / "batch_processed_offset_R1.png",
+    }
+    assert all(path.exists() for path in result.batch_figure_paths.values())
+    assert all(path.stat().st_size > 0 for path in result.batch_figure_paths.values())
 
     for item in result.succeeded_items:
         assert item.output_dir.parent == output_dir
@@ -109,7 +115,7 @@ def test_run_esr_batch_workflow_writes_per_file_outputs_and_aggregate_artifacts(
         assert item.figure_path is not None and item.figure_path.exists()
 
     rows = list(csv.DictReader(result.summary_csv_path.open("r", encoding="utf-8", newline="")))
-    assert [row["source_stem"] for row in rows] == ["alpha_trace", "beta_trace"]
+    assert [row["source_stem"] for row in rows] == ["sample-0deg-R1", "sample-45deg-R1"]
     assert all(row["status"] == "success" for row in rows)
     assert all(row["analysis_json"] for row in rows)
     assert all(row["summary_csv"] for row in rows)
@@ -119,14 +125,43 @@ def test_run_esr_batch_workflow_writes_per_file_outputs_and_aggregate_artifacts(
     assert payload["scan"]["recursive"] is False
     assert payload["succeeded_count"] == 2
     assert payload["failed_count"] == 0
+    assert payload["batch_figure_png"] is None
+    assert payload["batch_figures"] == {
+        key: str(path)
+        for key, path in sorted(result.batch_figure_paths.items())
+    }
     assert len(payload["items"]) == 2
+
+
+def test_run_esr_batch_workflow_groups_output_by_replicate(tmp_path, project_root, write_bruker_esr_sample) -> None:
+    source_dir = tmp_path / "raw"
+    source_dir.mkdir()
+    first = write_bruker_esr_sample(source_dir / "sample-90deg-R1.dsc")
+    second = write_bruker_esr_sample(source_dir / "sample-0deg-R2.dsc")
+    third = write_bruker_esr_sample(source_dir / "sample-45deg-R2.dsc")
+    output_dir = tmp_path / "processed" / "batch_run"
+    recipe_path = project_root / "recipes" / "esr" / "default.yaml"
+
+    result = run_esr_batch_workflow(
+        inputs=[source_dir],
+        recipe_path=recipe_path,
+        output_dir=output_dir,
+    )
+
+    assert result.discovered_sources == [first.resolve(), second.resolve(), third.resolve()]
+    assert result.batch_figure_paths == {
+        "batch_angle_overlay_R1": output_dir / "batch_angle_overlay_R1.png",
+        "batch_angle_overlay_R2": output_dir / "batch_angle_overlay_R2.png",
+        "batch_processed_offset_R1": output_dir / "batch_processed_offset_R1.png",
+        "batch_processed_offset_R2": output_dir / "batch_processed_offset_R2.png",
+    }
 
 
 def test_run_esr_batch_workflow_continues_when_one_file_fails(tmp_path, project_root, write_bruker_esr_sample) -> None:
     source_dir = tmp_path / "raw"
     source_dir.mkdir()
-    valid = write_bruker_esr_sample(source_dir / "valid_trace.dsc")
-    broken = source_dir / "broken_trace.dsc"
+    valid = write_bruker_esr_sample(source_dir / "valid-15deg-R1.dsc")
+    broken = source_dir / "broken-30deg-R1.dsc"
     broken.write_text(
         "\n".join(
             [
@@ -159,10 +194,84 @@ def test_run_esr_batch_workflow_continues_when_one_file_fails(tmp_path, project_
     assert len(result.failed_items) == 1
     assert result.failed_items[0].source_path == broken.resolve()
     assert "Missing sibling Bruker data file" in (result.failed_items[0].error_message or "")
+    assert result.batch_figure_paths == {
+        "batch_angle_overlay_R1": output_dir / "batch_angle_overlay_R1.png",
+        "batch_processed_offset_R1": output_dir / "batch_processed_offset_R1.png",
+    }
+    assert all(path.exists() for path in result.batch_figure_paths.values())
 
     rows = list(csv.DictReader(result.summary_csv_path.open("r", encoding="utf-8", newline="")))
-    broken_row = next(row for row in rows if row["source_stem"] == "broken_trace")
-    valid_row = next(row for row in rows if row["source_stem"] == "valid_trace")
+    broken_row = next(row for row in rows if row["source_stem"] == "broken-30deg-R1")
+    valid_row = next(row for row in rows if row["source_stem"] == "valid-15deg-R1")
     assert broken_row["status"] == "failed"
     assert "Missing sibling Bruker data file" in broken_row["error_message"]
     assert valid_row["status"] == "success"
+
+    payload = json.loads(result.manifest_json_path.read_text(encoding="utf-8"))
+    assert payload["batch_figure_png"] is None
+    assert payload["batch_figures"] == {
+        key: str(path)
+        for key, path in sorted(result.batch_figure_paths.items())
+    }
+
+
+def test_run_esr_batch_workflow_groups_missing_replicate_under_ungrouped(tmp_path, project_root, write_bruker_esr_sample) -> None:
+    source_dir = tmp_path / "raw"
+    source_dir.mkdir()
+    write_bruker_esr_sample(source_dir / "sample-0deg.dsc")
+    write_bruker_esr_sample(source_dir / "sample-45deg.dsc")
+    output_dir = tmp_path / "processed" / "batch_run"
+    recipe_path = project_root / "recipes" / "esr" / "default.yaml"
+
+    result = run_esr_batch_workflow(
+        inputs=[source_dir],
+        recipe_path=recipe_path,
+        output_dir=output_dir,
+    )
+
+    assert result.batch_figure_paths == {
+        "batch_angle_overlay_UNGROUPED": output_dir / "batch_angle_overlay_UNGROUPED.png",
+        "batch_processed_offset_UNGROUPED": output_dir / "batch_processed_offset_UNGROUPED.png",
+    }
+
+
+def test_run_esr_batch_workflow_records_null_batch_figure_when_no_files_succeed(tmp_path, project_root) -> None:
+    source_dir = tmp_path / "raw"
+    source_dir.mkdir()
+    for stem in ("broken_a", "broken_b"):
+        (source_dir / f"{stem}.dsc").write_text(
+            "\n".join(
+                [
+                    "#DESC\t1.2\t* DESCRIPTOR INFORMATION",
+                    "IKKF\tREAL",
+                    "IRFMT\tD",
+                    "XFMT\tD",
+                    "XTYP\tIDX",
+                    "YTYP\tNODATA",
+                    "ZTYP\tNODATA",
+                    "XPTS\t10",
+                    "XMIN\t3300",
+                    "XWID\t100",
+                    "XUNI\t'G'",
+                ]
+            ),
+            encoding="utf-8",
+        )
+    output_dir = tmp_path / "processed" / "batch_run"
+    recipe_path = project_root / "recipes" / "esr" / "default.yaml"
+
+    result = run_esr_batch_workflow(
+        inputs=[source_dir],
+        recipe_path=recipe_path,
+        output_dir=output_dir,
+    )
+
+    assert len(result.succeeded_items) == 0
+    assert len(result.failed_items) == 2
+    assert result.batch_figure_paths == {}
+    assert not (output_dir / "batch_angle_overlay_R1.png").exists()
+    assert not (output_dir / "batch_processed_offset_R1.png").exists()
+
+    payload = json.loads(result.manifest_json_path.read_text(encoding="utf-8"))
+    assert payload["batch_figures"] == {}
+    assert payload["batch_figure_png"] is None

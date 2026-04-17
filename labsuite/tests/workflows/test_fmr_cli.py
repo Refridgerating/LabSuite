@@ -54,9 +54,11 @@ def test_fmr_single_exports_all_artifacts(tmp_path, project_root, write_phasefmr
     assert len(payload["artifacts"]["trace_diagnostic_paths"]) == 4
     assert "mode_1" in payload["analysis_payload"]["series_collection_result"]["series_by_label"]
     assert "mode_2" in payload["analysis_payload"]["series_collection_result"]["series_by_label"]
+    assert all(fit["r_squared"] is not None for fit in payload["analysis_payload"]["trace_fit_results"])
 
     summary_rows = list(csv.DictReader(summary_path.open("r", encoding="utf-8", newline="")))
     assert summary_rows
+    assert "r_squared" in summary_rows[0]
     assert "selected_mode" in summary_rows[0]
     assert "component_label" in summary_rows[0]
     assert "component_accepted" in summary_rows[0]

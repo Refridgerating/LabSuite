@@ -71,6 +71,7 @@ def fit_fmr_trace(raw_trace: FmrTraceDataset, processed_trace: FmrProcessedTrace
         double_fit=double_fit,
         selected_components=selected_components,
         partial_component_qc=False,
+        r_squared=None if selected_fit.metrics.get("r_squared") is None else float(selected_fit.metrics["r_squared"]),
         signal_max_abs=None,
         residual_rmse_fraction=None,
         amplitude_snr=None,

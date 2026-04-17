@@ -196,6 +196,7 @@ def _run_modality_batch(spec: ModalityCliSpec, args: argparse.Namespace) -> int:
         source_label=spec.source_label,
         run_single_workflow=spec.run_single_workflow,
         summarize_analysis=spec.summarize_analysis,
+        export_batch_figure=spec.export_batch_figure,
         workflow_options=workflow_options,
     )
     _print_batch_result(batch_result)
@@ -384,6 +385,8 @@ def _print_single_result(modality: str, analysis, artifacts: WorkflowArtifacts) 
         )
         print(
             "Background: "
+            f"mode={summary.get('background_mode')}  "
+            f"accepted={summary.get('background_correction_accepted')}  "
             f"slope={summary.get('background_slope_emu_per_mT')} emu/mT, "
             f"intercept={summary.get('background_intercept_emu')} emu, "
             f"center_applied={summary.get('centering_applied')}"
@@ -402,6 +405,8 @@ def _print_batch_result(batch_result: BatchRunResult) -> None:
     print(f"Results folder: {batch_result.output_dir}")
     print(f"Batch summary: {batch_result.summary_csv_path}")
     print(f"Batch manifest: {batch_result.manifest_json_path}")
+    for name, path in sorted(batch_result.batch_figure_paths.items()):
+        print(f"Batch figure [{name}]: {path}")
 
 
 if __name__ == "__main__":

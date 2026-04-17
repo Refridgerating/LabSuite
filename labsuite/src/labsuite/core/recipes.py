@@ -49,8 +49,32 @@ class VsmPreprocessingRecipe:
     name: str = "vsm-default"
     background_tail_fraction: float = 0.12
     background_min_points_per_side: int = 24
+    background_tail_fit_min_r_squared: float = 0.6
+    background_tail_fit_catastrophic_r_squared: float = 0.2
+    background_tail_fit_override_min_flatness_gain_score: float = 0.6
+    background_tail_fit_override_min_flatness_gain_per_tail: float = 0.20
+    background_tail_fit_override_min_gain_balance_score: float = 0.65
+    background_tail_fit_override_min_switching_integrity_score: float = 0.85
+    background_min_meaningful_slope_emu_per_mT: float = 5e-8
     background_tail_flatness_ratio_tolerance: float = 0.08
     background_slope_disagreement_ratio_tolerance: float = 0.35
+    background_max_flatness_worsening: float = 0.02
+    background_max_tail_flatness_regression: float = 0.05
+    background_max_branch_asymmetry_worsening: float = 0.12
+    background_max_loop_closure_worsening: float = 0.08
+    background_max_zero_crossing_increase: int = 0
+    background_max_switching_width_relative_change: float = 0.25
+    background_max_coercive_ambiguity_worsening: int = 0
+    background_min_flatness_gain_score: float = 0.10
+    background_min_score_improvement: float = 0.02
+    background_score_weight_flatness: float = 0.45
+    background_score_weight_saturation_consistency: float = 0.30
+    background_score_weight_closure_quality: float = 0.20
+    background_score_weight_branch_asymmetry_penalty: float = 0.20
+    background_score_weight_flatness_gain: float = 0.55
+    background_score_weight_tail_slope_symmetry: float = 0.20
+    background_score_weight_saturation_magnitude_symmetry: float = 0.15
+    background_score_weight_switching_integrity: float = 0.10
     center_loop: bool = False
     smoothing_enabled: bool = False
     smoothing_window: int = 0
@@ -152,11 +176,63 @@ def load_vsm_recipe(path: Path) -> VsmPreprocessingRecipe:
         name=str(payload.get("name", "vsm-default")),
         background_tail_fraction=float(payload.get("background_tail_fraction", 0.12)),
         background_min_points_per_side=int(payload.get("background_min_points_per_side", 24)),
+        background_tail_fit_min_r_squared=float(payload.get("background_tail_fit_min_r_squared", 0.6)),
+        background_tail_fit_catastrophic_r_squared=float(
+            payload.get("background_tail_fit_catastrophic_r_squared", 0.2)
+        ),
+        background_tail_fit_override_min_flatness_gain_score=float(
+            payload.get("background_tail_fit_override_min_flatness_gain_score", 0.6)
+        ),
+        background_tail_fit_override_min_flatness_gain_per_tail=float(
+            payload.get("background_tail_fit_override_min_flatness_gain_per_tail", 0.20)
+        ),
+        background_tail_fit_override_min_gain_balance_score=float(
+            payload.get("background_tail_fit_override_min_gain_balance_score", 0.65)
+        ),
+        background_tail_fit_override_min_switching_integrity_score=float(
+            payload.get("background_tail_fit_override_min_switching_integrity_score", 0.85)
+        ),
+        background_min_meaningful_slope_emu_per_mT=float(
+            payload.get("background_min_meaningful_slope_emu_per_mT", 5e-8)
+        ),
         background_tail_flatness_ratio_tolerance=float(
             payload.get("background_tail_flatness_ratio_tolerance", 0.08)
         ),
         background_slope_disagreement_ratio_tolerance=float(
             payload.get("background_slope_disagreement_ratio_tolerance", 0.35)
+        ),
+        background_max_flatness_worsening=float(payload.get("background_max_flatness_worsening", 0.02)),
+        background_max_tail_flatness_regression=float(payload.get("background_max_tail_flatness_regression", 0.05)),
+        background_max_branch_asymmetry_worsening=float(
+            payload.get("background_max_branch_asymmetry_worsening", 0.12)
+        ),
+        background_max_loop_closure_worsening=float(payload.get("background_max_loop_closure_worsening", 0.08)),
+        background_max_zero_crossing_increase=int(payload.get("background_max_zero_crossing_increase", 0)),
+        background_max_switching_width_relative_change=float(
+            payload.get("background_max_switching_width_relative_change", 0.25)
+        ),
+        background_max_coercive_ambiguity_worsening=int(
+            payload.get("background_max_coercive_ambiguity_worsening", 0)
+        ),
+        background_min_flatness_gain_score=float(payload.get("background_min_flatness_gain_score", 0.10)),
+        background_min_score_improvement=float(payload.get("background_min_score_improvement", 0.02)),
+        background_score_weight_flatness=float(payload.get("background_score_weight_flatness", 0.45)),
+        background_score_weight_saturation_consistency=float(
+            payload.get("background_score_weight_saturation_consistency", 0.30)
+        ),
+        background_score_weight_closure_quality=float(payload.get("background_score_weight_closure_quality", 0.20)),
+        background_score_weight_branch_asymmetry_penalty=float(
+            payload.get("background_score_weight_branch_asymmetry_penalty", 0.20)
+        ),
+        background_score_weight_flatness_gain=float(payload.get("background_score_weight_flatness_gain", 0.55)),
+        background_score_weight_tail_slope_symmetry=float(
+            payload.get("background_score_weight_tail_slope_symmetry", 0.20)
+        ),
+        background_score_weight_saturation_magnitude_symmetry=float(
+            payload.get("background_score_weight_saturation_magnitude_symmetry", 0.15)
+        ),
+        background_score_weight_switching_integrity=float(
+            payload.get("background_score_weight_switching_integrity", 0.10)
         ),
         center_loop=bool(payload.get("center_loop", False)),
         smoothing_enabled=bool(payload.get("smoothing_enabled", False)),
@@ -308,10 +384,64 @@ def _validate_vsm_recipe(recipe: VsmPreprocessingRecipe) -> None:
         raise RecipeError("background_tail_fraction must be between 0 and 0.5")
     if recipe.background_min_points_per_side < 2:
         raise RecipeError("background_min_points_per_side must be at least 2")
+    if not 0.0 <= recipe.background_tail_fit_min_r_squared <= 1.0:
+        raise RecipeError("background_tail_fit_min_r_squared must be between 0 and 1")
+    if not 0.0 <= recipe.background_tail_fit_catastrophic_r_squared <= 1.0:
+        raise RecipeError("background_tail_fit_catastrophic_r_squared must be between 0 and 1")
+    if recipe.background_tail_fit_catastrophic_r_squared > recipe.background_tail_fit_min_r_squared:
+        raise RecipeError(
+            "background_tail_fit_catastrophic_r_squared must be less than or equal to background_tail_fit_min_r_squared"
+        )
+    if not 0.0 <= recipe.background_tail_fit_override_min_flatness_gain_score <= 1.0:
+        raise RecipeError("background_tail_fit_override_min_flatness_gain_score must be between 0 and 1")
+    if not 0.0 <= recipe.background_tail_fit_override_min_flatness_gain_per_tail <= 1.0:
+        raise RecipeError("background_tail_fit_override_min_flatness_gain_per_tail must be between 0 and 1")
+    if not 0.0 <= recipe.background_tail_fit_override_min_gain_balance_score <= 1.0:
+        raise RecipeError("background_tail_fit_override_min_gain_balance_score must be between 0 and 1")
+    if not 0.0 <= recipe.background_tail_fit_override_min_switching_integrity_score <= 1.0:
+        raise RecipeError(
+            "background_tail_fit_override_min_switching_integrity_score must be between 0 and 1"
+        )
+    if recipe.background_min_meaningful_slope_emu_per_mT <= 0.0:
+        raise RecipeError("background_min_meaningful_slope_emu_per_mT must be positive")
     if recipe.background_tail_flatness_ratio_tolerance <= 0.0:
         raise RecipeError("background_tail_flatness_ratio_tolerance must be positive")
     if recipe.background_slope_disagreement_ratio_tolerance <= 0.0:
         raise RecipeError("background_slope_disagreement_ratio_tolerance must be positive")
+    if recipe.background_max_flatness_worsening < 0.0:
+        raise RecipeError("background_max_flatness_worsening must be zero or positive")
+    if recipe.background_max_tail_flatness_regression < 0.0:
+        raise RecipeError("background_max_tail_flatness_regression must be zero or positive")
+    if recipe.background_max_branch_asymmetry_worsening < 0.0:
+        raise RecipeError("background_max_branch_asymmetry_worsening must be zero or positive")
+    if recipe.background_max_loop_closure_worsening < 0.0:
+        raise RecipeError("background_max_loop_closure_worsening must be zero or positive")
+    if recipe.background_max_zero_crossing_increase < 0:
+        raise RecipeError("background_max_zero_crossing_increase must be zero or positive")
+    if recipe.background_max_switching_width_relative_change < 0.0:
+        raise RecipeError("background_max_switching_width_relative_change must be zero or positive")
+    if recipe.background_max_coercive_ambiguity_worsening < 0:
+        raise RecipeError("background_max_coercive_ambiguity_worsening must be zero or positive")
+    if recipe.background_min_flatness_gain_score < 0.0:
+        raise RecipeError("background_min_flatness_gain_score must be zero or positive")
+    if recipe.background_min_score_improvement < 0.0:
+        raise RecipeError("background_min_score_improvement must be zero or positive")
+    if recipe.background_score_weight_flatness < 0.0:
+        raise RecipeError("background_score_weight_flatness must be zero or positive")
+    if recipe.background_score_weight_saturation_consistency < 0.0:
+        raise RecipeError("background_score_weight_saturation_consistency must be zero or positive")
+    if recipe.background_score_weight_closure_quality < 0.0:
+        raise RecipeError("background_score_weight_closure_quality must be zero or positive")
+    if recipe.background_score_weight_branch_asymmetry_penalty < 0.0:
+        raise RecipeError("background_score_weight_branch_asymmetry_penalty must be zero or positive")
+    if recipe.background_score_weight_flatness_gain < 0.0:
+        raise RecipeError("background_score_weight_flatness_gain must be zero or positive")
+    if recipe.background_score_weight_tail_slope_symmetry < 0.0:
+        raise RecipeError("background_score_weight_tail_slope_symmetry must be zero or positive")
+    if recipe.background_score_weight_saturation_magnitude_symmetry < 0.0:
+        raise RecipeError("background_score_weight_saturation_magnitude_symmetry must be zero or positive")
+    if recipe.background_score_weight_switching_integrity < 0.0:
+        raise RecipeError("background_score_weight_switching_integrity must be zero or positive")
     if recipe.smoothing_window < 0:
         raise RecipeError("smoothing_window must be zero or positive")
     if recipe.smoothing_polyorder < 0:

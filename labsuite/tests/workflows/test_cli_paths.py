@@ -76,8 +76,8 @@ def test_fit_single_errors_when_folder_resolves_multiple_matches(tmp_path, proje
 def test_fit_batch_accepts_folder_input(tmp_path, project_root, write_bruker_esr_sample) -> None:
     source_dir = tmp_path / "raw"
     source_dir.mkdir()
-    write_bruker_esr_sample(source_dir / "alpha_trace.dsc")
-    write_bruker_esr_sample(source_dir / "beta_trace.dsc")
+    write_bruker_esr_sample(source_dir / "alpha-0deg-R1.dsc")
+    write_bruker_esr_sample(source_dir / "beta-45deg-R1.dsc")
     output_dir = tmp_path / "processed" / "batch_out"
     recipe_path = project_root / "recipes" / "esr" / "default.yaml"
 
@@ -96,8 +96,10 @@ def test_fit_batch_accepts_folder_input(tmp_path, project_root, write_bruker_esr
     assert exit_code == 0
     assert (output_dir / "batch_summary.csv").exists()
     assert (output_dir / "batch_manifest.json").exists()
-    assert (output_dir / "alpha_trace" / "alpha_trace_analysis.json").exists()
-    assert (output_dir / "beta_trace" / "beta_trace_analysis.json").exists()
+    assert (output_dir / "batch_processed_offset_R1.png").exists()
+    assert (output_dir / "batch_angle_overlay_R1.png").exists()
+    assert (output_dir / "alpha-0deg-R1" / "alpha-0deg-R1_analysis.json").exists()
+    assert (output_dir / "beta-45deg-R1" / "beta-45deg-R1_analysis.json").exists()
 
 
 def test_fit_batch_filters_folder_input_with_pattern(tmp_path, project_root, write_bruker_esr_sample) -> None:
@@ -131,7 +133,7 @@ def test_fit_batch_recursively_discovers_nested_files(tmp_path, project_root, wr
     source_dir = tmp_path / "raw"
     nested_dir = source_dir / "nested"
     nested_dir.mkdir(parents=True)
-    write_bruker_esr_sample(nested_dir / "nested_trace.dsc")
+    write_bruker_esr_sample(nested_dir / "nested-0deg-R1.dsc")
     output_dir = tmp_path / "processed" / "batch_out"
     recipe_path = project_root / "recipes" / "esr" / "default.yaml"
 
@@ -151,4 +153,38 @@ def test_fit_batch_recursively_discovers_nested_files(tmp_path, project_root, wr
     assert exit_code == 0
     payload = json.loads((output_dir / "batch_manifest.json").read_text(encoding="utf-8"))
     assert payload["scan"]["recursive"] is True
-    assert [item["source_file"] for item in payload["items"]] == [str((nested_dir / "nested_trace.dsc").resolve())]
+    assert payload["batch_figure_png"] is None
+    assert payload["batch_figures"] == {
+        "batch_angle_overlay_R1": str((output_dir / "batch_angle_overlay_R1.png").resolve()),
+        "batch_processed_offset_R1": str((output_dir / "batch_processed_offset_R1.png").resolve()),
+    }
+    assert [item["source_file"] for item in payload["items"]] == [str((nested_dir / "nested-0deg-R1.dsc").resolve())]
+
+
+def test_esr_batch_prints_batch_overlay_path(tmp_path, project_root, write_bruker_esr_sample, capsys) -> None:
+    source_dir = tmp_path / "raw"
+    source_dir.mkdir()
+    write_bruker_esr_sample(source_dir / "alpha-0deg-R1.dsc")
+    write_bruker_esr_sample(source_dir / "beta-45deg-R2.dsc")
+    output_dir = tmp_path / "processed" / "esr_batch"
+    recipe_path = project_root / "recipes" / "esr" / "default.yaml"
+
+    exit_code = main(
+        [
+            "esr",
+            "batch",
+            "--input",
+            str(source_dir),
+            "--recipe",
+            str(recipe_path),
+            "--output-dir",
+            str(output_dir),
+        ]
+    )
+
+    assert exit_code == 0
+    output = capsys.readouterr().out
+    assert f"Batch figure [batch_processed_offset_R1]: {output_dir / 'batch_processed_offset_R1.png'}" in output
+    assert f"Batch figure [batch_angle_overlay_R1]: {output_dir / 'batch_angle_overlay_R1.png'}" in output
+    assert f"Batch figure [batch_processed_offset_R2]: {output_dir / 'batch_processed_offset_R2.png'}" in output
+    assert f"Batch figure [batch_angle_overlay_R2]: {output_dir / 'batch_angle_overlay_R2.png'}" in output
