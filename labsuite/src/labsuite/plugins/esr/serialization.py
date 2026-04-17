@@ -29,6 +29,7 @@ from labsuite.core.types import (
     ResidualSummary,
     TraceDataset,
 )
+from labsuite.plugins.esr.batch_qc import build_multi_bucket_slug, parse_esr_batch_identity
 
 
 def load_esr_analysis_result(path: Path) -> AnalysisResult:
@@ -110,26 +111,41 @@ def export_esr_batch_overlay_figure(
     analyses: list[AnalysisResult],
     output_dir: Path,
 ) -> dict[str, Path]:
-    """Export ESR batch figures grouped by replicate and ordered by angle."""
+    """Export ESR batch figures grouped by sample/frequency bucket and replicate."""
 
     if not analyses:
         return {}
 
-    grouped_entries: dict[str, list[dict[str, Any]]] = {}
+    identities = [
+        parse_esr_batch_identity(analysis.dataset.source_path, analysis.dataset.metadata)
+        for analysis in analyses
+    ]
+    slug_by_bucket = build_multi_bucket_slug(identities)
+
+    grouped_entries: dict[tuple[str, float | None, str], list[dict[str, Any]]] = {}
     for analysis in analyses:
-        filename_tokens = _parse_esr_filename_tokens(analysis.dataset.source_path)
-        replicate_id = filename_tokens["replicate_id"] or "UNGROUPED"
-        grouped_entries.setdefault(replicate_id, []).append(
+        identity = parse_esr_batch_identity(analysis.dataset.source_path, analysis.dataset.metadata)
+        replicate_id = identity.replicate_id or "UNGROUPED"
+        group_key = (identity.sample_id, identity.frequency_bucket_GHz, replicate_id)
+        grouped_entries.setdefault(group_key, []).append(
             {
                 "analysis": analysis,
-                "source_stem": filename_tokens["source_stem"],
-                "angle_deg": filename_tokens["angle_deg"],
-                "label": _esr_angle_display_label(filename_tokens),
+                "source_stem": analysis.dataset.source_path.stem,
+                "angle_deg": identity.nominal_angle_deg,
+                "label": _esr_angle_display_label(
+                    {
+                        "source_stem": analysis.dataset.source_path.stem,
+                        "angle_deg": identity.nominal_angle_deg,
+                    }
+                ),
+                "sample_id": identity.sample_id,
+                "frequency_GHz": identity.frequency_bucket_GHz,
             }
         )
 
     exported_paths: dict[str, Path] = {}
-    for replicate_id, entries in sorted(grouped_entries.items(), key=lambda item: _esr_replicate_sort_key(item[0])):
+    for group_key, entries in sorted(grouped_entries.items(), key=lambda item: _esr_group_sort_key(item[0])):
+        sample_id, frequency_GHz, replicate_id = group_key
         ordered_entries = sorted(
             entries,
             key=lambda entry: (
@@ -137,22 +153,28 @@ def export_esr_batch_overlay_figure(
                 str(entry["source_stem"]).lower(),
             ),
         )
-        offset_path = output_dir / f"batch_processed_offset_{replicate_id}.png"
-        overlay_path = output_dir / f"batch_angle_overlay_{replicate_id}.png"
+        slug = slug_by_bucket.get((sample_id, frequency_GHz), "")
+        suffix = f"{slug}_{replicate_id}" if slug else replicate_id
+        offset_path = output_dir / f"batch_processed_offset_{suffix}.png"
+        overlay_path = output_dir / f"batch_angle_overlay_{suffix}.png"
         _export_esr_group_figure(
             ordered_entries,
             replicate_id=replicate_id,
+            sample_id=sample_id,
+            frequency_GHz=frequency_GHz,
             destination=offset_path,
             plot_mode="offset",
         )
         _export_esr_group_figure(
             ordered_entries,
             replicate_id=replicate_id,
+            sample_id=sample_id,
+            frequency_GHz=frequency_GHz,
             destination=overlay_path,
             plot_mode="overlay",
         )
-        exported_paths[f"batch_processed_offset_{replicate_id}"] = offset_path
-        exported_paths[f"batch_angle_overlay_{replicate_id}"] = overlay_path
+        exported_paths[f"batch_processed_offset_{suffix}"] = offset_path
+        exported_paths[f"batch_angle_overlay_{suffix}"] = overlay_path
     return exported_paths
 
 
@@ -312,6 +334,8 @@ def _export_esr_group_figure(
     entries: list[dict[str, Any]],
     *,
     replicate_id: str,
+    sample_id: str,
+    frequency_GHz: float | None,
     destination: Path,
     plot_mode: str,
 ) -> None:
@@ -332,7 +356,7 @@ def _export_esr_group_figure(
             label=entry["label"],
         )
 
-    axis.set_title(_esr_group_title(replicate_id, plot_mode))
+    axis.set_title(_esr_group_title(sample_id, frequency_GHz, replicate_id, plot_mode))
     axis.set_xlabel("Field (mT)")
     axis.set_ylabel("Processed derivative" if plot_mode == "overlay" else "Processed derivative + offset")
     axis.grid(alpha=0.2)
@@ -399,10 +423,20 @@ def _esr_angle_display_label(filename_tokens: dict[str, Any]) -> str:
     return f"{angle_deg:.3g} deg"
 
 
-def _esr_group_title(replicate_id: str, plot_mode: str) -> str:
+def _esr_group_title(sample_id: str, frequency_GHz: float | None, replicate_id: str, plot_mode: str) -> str:
+    frequency_label = "" if frequency_GHz is None else f", {frequency_GHz:.3f} GHz"
     if plot_mode == "overlay":
-        return f"ESR Angle Overlay ({replicate_id})"
-    return f"ESR Processed Derivative Offset ({replicate_id})"
+        return f"ESR Angle Overlay ({sample_id}, {replicate_id}{frequency_label})"
+    return f"ESR Processed Derivative Offset ({sample_id}, {replicate_id}{frequency_label})"
+
+
+def _esr_group_sort_key(group_key: tuple[str, float | None, str]) -> tuple[str, float, tuple[int, str]]:
+    sample_id, frequency_GHz, replicate_id = group_key
+    return (
+        sample_id.lower(),
+        float("inf") if frequency_GHz is None else float(frequency_GHz),
+        _esr_replicate_sort_key(replicate_id),
+    )
 
 
 def _esr_replicate_sort_key(replicate_id: str) -> tuple[int, str]:

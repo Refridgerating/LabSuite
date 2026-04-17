@@ -31,6 +31,7 @@ def write_bruker_esr_sample():
         field_start_mT: float = 330.0,
         field_end_mT: float = 350.0,
         point_count: int = 401,
+        frequency_GHz: float = 9.49889673634545,
     ) -> Path:
         descriptor_path = path if path.suffix.lower() == ".dsc" else path.with_suffix(".dsc")
         data_path = descriptor_path.with_suffix(".DTA")
@@ -73,7 +74,7 @@ def write_bruker_esr_sample():
                     "XUNI\t'G'",
                     "DATE\t04/13/26",
                     "TIME\t12:00:00",
-                    "MWFQ\t9498896736.34545",
+                    f"MWFQ\t{frequency_GHz * 1e9:.12f}",
                     "MWPW\t0.01",
                     "B0MA\t0.0001",
                     "B0MF\t100000",

@@ -6,13 +6,24 @@ from datetime import datetime
 from pathlib import Path
 from typing import Literal, Sequence
 
-from labsuite.cli.registry import summarize_esr_analysis
-from labsuite.plugins.esr.serialization import export_esr_batch_overlay_figure
+from labsuite.core.recipes import load_esr_recipe
+from labsuite.plugins.esr.batch_qc import (
+    EsrBatchQcRecord,
+    compute_esr_qc_metrics,
+    export_esr_batch_qc_csv,
+    select_best_runs,
+)
+from labsuite.plugins.esr.serialization import (
+    export_esr_batch_overlay_figure,
+    load_esr_analysis_result,
+)
 from labsuite.workflows.measurement_batch import (
+    BatchItemResult,
     BatchRunResult,
     build_default_batch_output_dir as build_default_measurement_batch_output_dir,
     discover_source_files,
     run_batch_workflow,
+    write_batch_outputs,
 )
 from labsuite.workflows.single_file import run_esr_single_file_workflow
 
@@ -59,7 +70,7 @@ def run_esr_batch_workflow(
 ) -> BatchRunResult:
     """Run the ESR workflow across every discovered source file."""
 
-    return run_batch_workflow(
+    batch_result = run_batch_workflow(
         inputs=inputs,
         recipe_path=recipe_path,
         output_dir=output_dir,
@@ -68,10 +79,115 @@ def run_esr_batch_workflow(
         recursive=recursive,
         source_label="ESR descriptor",
         run_single_workflow=run_esr_single_file_workflow,
-        summarize_analysis=summarize_esr_analysis,
-        export_batch_figure=export_esr_batch_overlay_figure,
+        summarize_analysis=_summarize_esr_analysis,
+        export_batch_figure=None,
         workflow_options={
             "fit_mode": fit_mode,
             "show_raw": show_raw,
         },
     )
+
+    recipe = load_esr_recipe(recipe_path.resolve())
+    qc_records, successful_analyses = _build_qc_records(batch_result, recipe)
+    select_best_runs(qc_records)
+    qc_by_source = {record.source_path.resolve(): record for record in qc_records}
+    _merge_qc_summary_metrics(batch_result.succeeded_items, qc_by_source)
+    _merge_qc_summary_metrics(batch_result.failed_items, qc_by_source)
+
+    export_esr_batch_qc_csv(qc_records, output_dir / "batch_qc.csv")
+    selected_analyses = _selected_analyses(successful_analyses, qc_records)
+    batch_result.batch_figure_paths = (
+        export_esr_batch_overlay_figure(selected_analyses, output_dir) if selected_analyses else {}
+    )
+
+    all_items = sorted(
+        [*batch_result.succeeded_items, *batch_result.failed_items],
+        key=lambda item: str(item.source_path).lower(),
+    )
+    batch_result.summary_csv_path, batch_result.manifest_json_path = write_batch_outputs(
+        inputs=[path.resolve() for path in inputs],
+        pattern=pattern,
+        recursive=recursive,
+        output_dir=output_dir,
+        items=all_items,
+        batch_figure_paths=batch_result.batch_figure_paths,
+    )
+    return batch_result
+
+
+def _summarize_esr_analysis(analysis) -> dict[str, object]:
+    """Extract ESR batch-summary fields from one analysis result."""
+
+    return {
+        "selected_mode": analysis.selected_mode,
+        "candidate_peak_count": analysis.fit_decision.candidate_peak_count,
+        "split_improvement_ratio": analysis.fit_decision.split_improvement_ratio,
+        "total_area_integral": analysis.total_integral.area_integral,
+        "local_area_integral": analysis.local_total_integral.area_integral,
+        "fit_local_disagreement_ratio": analysis.fit_local_disagreement_ratio,
+        "fit_local_disagreement_flag": analysis.fit_local_disagreement_flag,
+        "fit_local_disagreement_reason": analysis.fit_local_disagreement_reason,
+    }
+
+
+def _build_qc_records(
+    batch_result: BatchRunResult,
+    recipe,
+) -> tuple[list[EsrBatchQcRecord], dict[Path, object]]:
+    successful_analyses: dict[Path, object] = {}
+    records: list[EsrBatchQcRecord] = []
+
+    for item in batch_result.succeeded_items:
+        if item.json_path is None:
+            records.append(
+                compute_esr_qc_metrics(
+                    None,
+                    source_path=item.source_path,
+                    recipe=recipe,
+                    error_message="missing_analysis_json",
+                )
+            )
+            continue
+        analysis = load_esr_analysis_result(item.json_path)
+        successful_analyses[item.source_path.resolve()] = analysis
+        records.append(
+            compute_esr_qc_metrics(
+                analysis,
+                source_path=item.source_path,
+                recipe=recipe,
+            )
+        )
+
+    for item in batch_result.failed_items:
+        records.append(
+            compute_esr_qc_metrics(
+                None,
+                source_path=item.source_path,
+                recipe=recipe,
+                error_message=item.error_message,
+            )
+        )
+
+    return records, successful_analyses
+
+
+def _selected_analyses(
+    successful_analyses: dict[Path, object],
+    qc_records: Sequence[EsrBatchQcRecord],
+) -> list[object]:
+    return [
+        successful_analyses[record.source_path.resolve()]
+        for record in qc_records
+        if record.accepted_for_plot and record.selected_as_best and record.source_path.resolve() in successful_analyses
+    ]
+
+
+def _merge_qc_summary_metrics(
+    items: Sequence[BatchItemResult],
+    qc_by_source: dict[Path, EsrBatchQcRecord],
+) -> None:
+    for item in items:
+        record = qc_by_source.get(item.source_path.resolve())
+        if record is None:
+            continue
+        item.summary_metrics.update(record.summary_metrics())

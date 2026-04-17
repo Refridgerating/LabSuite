@@ -36,7 +36,7 @@ def test_discover_esr_source_files_respects_recursive_flag(write_bruker_esr_samp
     nested_dir.mkdir(parents=True)
     nested_file = write_bruker_esr_sample(nested_dir / "nested_trace.dsc")
 
-    with pytest.raises(WorkflowError, match="No ESR descriptor files were discovered"):
+    with pytest.raises(WorkflowError, match="No ESR descriptor source files were discovered"):
         discover_esr_source_files([source_dir], recursive=False, pattern="*.dsc")
     recursive = discover_esr_source_files([source_dir], recursive=True, pattern="*.dsc")
 
@@ -58,7 +58,7 @@ def test_discover_esr_source_files_rejects_invalid_direct_input(tmp_path) -> Non
     csv_file = tmp_path / "trace.csv"
     csv_file.write_text("field,signal", encoding="utf-8")
 
-    with pytest.raises(WorkflowError, match="Direct file input must be a Bruker descriptor"):
+    with pytest.raises(WorkflowError, match="Direct file input must be a ESR descriptor source"):
         discover_esr_source_files([csv_file])
 
 
@@ -66,7 +66,7 @@ def test_discover_esr_source_files_raises_when_no_matches(tmp_path) -> None:
     source_dir = tmp_path / "empty"
     source_dir.mkdir()
 
-    with pytest.raises(WorkflowError, match="No ESR descriptor files were discovered"):
+    with pytest.raises(WorkflowError, match="No ESR descriptor source files were discovered"):
         discover_esr_source_files([source_dir])
 
 
@@ -76,13 +76,7 @@ def test_run_esr_batch_workflow_writes_per_file_outputs_and_aggregate_artifacts(
     source_dir = tmp_path / "raw"
     source_dir.mkdir()
     first = write_bruker_esr_sample(source_dir / "sample-0deg-R1.dsc")
-    second = write_bruker_esr_sample(
-        source_dir / "sample-45deg-R1.dsc",
-        components=[
-            {"amplitude": 1.0, "center_mT": 335.0, "gamma_mT": 0.8, "offset": 0.0},
-            {"amplitude": 0.9, "center_mT": 345.0, "gamma_mT": 0.9, "offset": 0.0},
-        ],
-    )
+    second = write_bruker_esr_sample(source_dir / "sample-45deg-R1.dsc", center_mT=338.5, gamma_mT=0.9)
     output_dir = tmp_path / "processed" / "batch_run"
     recipe_path = project_root / "recipes" / "esr" / "default.yaml"
 
@@ -100,6 +94,7 @@ def test_run_esr_batch_workflow_writes_per_file_outputs_and_aggregate_artifacts(
     assert len(result.failed_items) == 0
     assert result.summary_csv_path.exists()
     assert result.manifest_json_path.exists()
+    assert (output_dir / "batch_qc.csv").exists()
     assert result.batch_figure_paths == {
         "batch_angle_overlay_R1": output_dir / "batch_angle_overlay_R1.png",
         "batch_processed_offset_R1": output_dir / "batch_processed_offset_R1.png",
@@ -119,6 +114,8 @@ def test_run_esr_batch_workflow_writes_per_file_outputs_and_aggregate_artifacts(
     assert all(row["status"] == "success" for row in rows)
     assert all(row["analysis_json"] for row in rows)
     assert all(row["summary_csv"] for row in rows)
+    assert all(row["selected_as_best"] == "True" for row in rows)
+    assert all(row["accepted_for_plot"] == "True" for row in rows)
 
     payload = json.loads(result.manifest_json_path.read_text(encoding="utf-8"))
     assert payload["scan"]["pattern"] == "*.dsc"
@@ -148,7 +145,10 @@ def test_run_esr_batch_workflow_groups_output_by_replicate(tmp_path, project_roo
         output_dir=output_dir,
     )
 
-    assert result.discovered_sources == [first.resolve(), second.resolve(), third.resolve()]
+    assert result.discovered_sources == sorted(
+        [first.resolve(), second.resolve(), third.resolve()],
+        key=lambda path: str(path).lower(),
+    )
     assert result.batch_figure_paths == {
         "batch_angle_overlay_R1": output_dir / "batch_angle_overlay_R1.png",
         "batch_angle_overlay_R2": output_dir / "batch_angle_overlay_R2.png",
@@ -275,3 +275,62 @@ def test_run_esr_batch_workflow_records_null_batch_figure_when_no_files_succeed(
     payload = json.loads(result.manifest_json_path.read_text(encoding="utf-8"))
     assert payload["batch_figures"] == {}
     assert payload["batch_figure_png"] is None
+
+
+def test_run_esr_batch_workflow_selects_best_duplicate_same_angle(
+    tmp_path,
+    project_root,
+    write_bruker_esr_sample,
+) -> None:
+    source_dir = tmp_path / "raw"
+    source_dir.mkdir()
+    clipped = write_bruker_esr_sample(
+        source_dir / "20260220_120000000_sample-65deg-R1.dsc",
+        center_mT=343.7,
+        gamma_mT=1.2,
+        field_start_mT=340.0,
+        field_end_mT=346.0,
+    )
+    best = write_bruker_esr_sample(
+        source_dir / "20260220_130000000_sample-65deg-R1.dsc",
+        center_mT=340.0,
+        gamma_mT=1.0,
+        field_start_mT=330.0,
+        field_end_mT=350.0,
+    )
+    other_angle = write_bruker_esr_sample(source_dir / "20260220_140000000_sample-70deg-R1.dsc")
+    output_dir = tmp_path / "processed" / "batch_run"
+    recipe_path = project_root / "recipes" / "esr" / "default.yaml"
+
+    result = run_esr_batch_workflow(
+        inputs=[source_dir],
+        recipe_path=recipe_path,
+        output_dir=output_dir,
+    )
+
+    assert result.batch_figure_paths == {
+        "batch_angle_overlay_R1": output_dir / "batch_angle_overlay_R1.png",
+        "batch_processed_offset_R1": output_dir / "batch_processed_offset_R1.png",
+    }
+
+    qc_rows = list(csv.DictReader((output_dir / "batch_qc.csv").open("r", encoding="utf-8", newline="")))
+    clipped_row = next(row for row in qc_rows if row["file"] == str(clipped.resolve()))
+    best_row = next(row for row in qc_rows if row["file"] == str(best.resolve()))
+    other_row = next(row for row in qc_rows if row["file"] == str(other_angle.resolve()))
+
+    assert clipped_row["selected_as_best"] == "False"
+    assert clipped_row["accepted_for_plot"] == "False"
+    assert clipped_row["reject_reason"] == "edge_truncated"
+    assert best_row["selected_as_best"] == "True"
+    assert best_row["accepted_for_plot"] == "True"
+    assert best_row["reject_reason"] == ""
+    assert other_row["selected_as_best"] == "True"
+    assert other_row["accepted_for_plot"] == "True"
+
+    summary_rows = list(csv.DictReader(result.summary_csv_path.open("r", encoding="utf-8", newline="")))
+    best_summary = next(row for row in summary_rows if row["source_file"] == str(best.resolve()))
+    clipped_summary = next(row for row in summary_rows if row["source_file"] == str(clipped.resolve()))
+    assert best_summary["selected_as_best"] == "True"
+    assert best_summary["accepted_for_plot"] == "True"
+    assert clipped_summary["accepted_for_plot"] == "False"
+    assert clipped_summary["reject_reason"] == "edge_truncated"

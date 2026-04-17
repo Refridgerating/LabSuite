@@ -190,19 +190,15 @@ def run_batch_workflow(
         )
         successful_analyses.append(analysis)
 
-    summary_csv_path = output_dir / "batch_summary.csv"
-    manifest_json_path = output_dir / "batch_manifest.json"
     batch_figure_paths = {} if export_batch_figure is None else export_batch_figure(successful_analyses, output_dir)
     all_items = sorted([*succeeded_items, *failed_items], key=lambda item: str(item.source_path).lower())
-    _write_batch_summary_csv(all_items, summary_csv_path)
-    _write_batch_manifest_json(
+    summary_csv_path, manifest_json_path = write_batch_outputs(
         inputs=resolved_inputs,
         pattern=pattern,
         recursive=recursive,
         output_dir=output_dir,
         items=all_items,
         batch_figure_paths=batch_figure_paths,
-        destination=manifest_json_path,
     )
     return BatchRunResult(
         discovered_sources=discovered_sources,
@@ -213,6 +209,32 @@ def run_batch_workflow(
         manifest_json_path=manifest_json_path,
         batch_figure_paths=batch_figure_paths,
     )
+
+
+def write_batch_outputs(
+    *,
+    inputs: Sequence[Path],
+    pattern: str,
+    recursive: bool,
+    output_dir: Path,
+    items: Sequence[BatchItemResult],
+    batch_figure_paths: dict[str, Path],
+) -> tuple[Path, Path]:
+    """Write batch summary and manifest artifacts for a completed run."""
+
+    summary_csv_path = output_dir / "batch_summary.csv"
+    manifest_json_path = output_dir / "batch_manifest.json"
+    _write_batch_summary_csv(items, summary_csv_path)
+    _write_batch_manifest_json(
+        inputs=inputs,
+        pattern=pattern,
+        recursive=recursive,
+        output_dir=output_dir,
+        items=items,
+        batch_figure_paths=batch_figure_paths,
+        destination=manifest_json_path,
+    )
+    return summary_csv_path, manifest_json_path
 
 
 def _build_item_output_dirs(output_dir: Path, sources: Sequence[Path]) -> dict[Path, Path]:

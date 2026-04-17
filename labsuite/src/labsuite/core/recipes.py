@@ -37,6 +37,9 @@ class EsrPreprocessingRecipe:
     integration_detected_window_padding_width_multiplier: float = 3.0
     fit_max_gamma_as_sweep_fraction: float = 0.5
     fit_local_disagreement_ratio_threshold: float = 0.35
+    batch_qc_nrmse_max: float = 0.12
+    batch_qc_edge_guard_min_mT: float = 2.0
+    batch_qc_edge_guard_gamma_multiplier: float = 2.0
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -163,6 +166,9 @@ def load_esr_recipe(path: Path) -> EsrPreprocessingRecipe:
         ),
         fit_max_gamma_as_sweep_fraction=float(payload.get("fit_max_gamma_as_sweep_fraction", 0.5)),
         fit_local_disagreement_ratio_threshold=float(payload.get("fit_local_disagreement_ratio_threshold", 0.35)),
+        batch_qc_nrmse_max=float(payload.get("batch_qc_nrmse_max", 0.12)),
+        batch_qc_edge_guard_min_mT=float(payload.get("batch_qc_edge_guard_min_mT", 2.0)),
+        batch_qc_edge_guard_gamma_multiplier=float(payload.get("batch_qc_edge_guard_gamma_multiplier", 2.0)),
     )
     _validate_recipe(recipe)
     return recipe
@@ -377,6 +383,12 @@ def _validate_recipe(recipe: EsrPreprocessingRecipe) -> None:
         raise RecipeError("fit_max_gamma_as_sweep_fraction must be between 0 and 1")
     if recipe.fit_local_disagreement_ratio_threshold <= 0.0:
         raise RecipeError("fit_local_disagreement_ratio_threshold must be positive")
+    if recipe.batch_qc_nrmse_max <= 0.0:
+        raise RecipeError("batch_qc_nrmse_max must be positive")
+    if recipe.batch_qc_edge_guard_min_mT <= 0.0:
+        raise RecipeError("batch_qc_edge_guard_min_mT must be positive")
+    if recipe.batch_qc_edge_guard_gamma_multiplier <= 0.0:
+        raise RecipeError("batch_qc_edge_guard_gamma_multiplier must be positive")
 
 
 def _validate_vsm_recipe(recipe: VsmPreprocessingRecipe) -> None:

@@ -76,8 +76,8 @@ def test_fit_single_errors_when_folder_resolves_multiple_matches(tmp_path, proje
 def test_fit_batch_accepts_folder_input(tmp_path, project_root, write_bruker_esr_sample) -> None:
     source_dir = tmp_path / "raw"
     source_dir.mkdir()
-    write_bruker_esr_sample(source_dir / "alpha-0deg-R1.dsc")
-    write_bruker_esr_sample(source_dir / "beta-45deg-R1.dsc")
+    write_bruker_esr_sample(source_dir / "sample-0deg-R1.dsc")
+    write_bruker_esr_sample(source_dir / "sample-45deg-R1.dsc")
     output_dir = tmp_path / "processed" / "batch_out"
     recipe_path = project_root / "recipes" / "esr" / "default.yaml"
 
@@ -96,10 +96,11 @@ def test_fit_batch_accepts_folder_input(tmp_path, project_root, write_bruker_esr
     assert exit_code == 0
     assert (output_dir / "batch_summary.csv").exists()
     assert (output_dir / "batch_manifest.json").exists()
+    assert (output_dir / "batch_qc.csv").exists()
     assert (output_dir / "batch_processed_offset_R1.png").exists()
     assert (output_dir / "batch_angle_overlay_R1.png").exists()
-    assert (output_dir / "alpha-0deg-R1" / "alpha-0deg-R1_analysis.json").exists()
-    assert (output_dir / "beta-45deg-R1" / "beta-45deg-R1_analysis.json").exists()
+    assert (output_dir / "sample-0deg-R1" / "sample-0deg-R1_analysis.json").exists()
+    assert (output_dir / "sample-45deg-R1" / "sample-45deg-R1_analysis.json").exists()
 
 
 def test_fit_batch_filters_folder_input_with_pattern(tmp_path, project_root, write_bruker_esr_sample) -> None:
@@ -164,8 +165,8 @@ def test_fit_batch_recursively_discovers_nested_files(tmp_path, project_root, wr
 def test_esr_batch_prints_batch_overlay_path(tmp_path, project_root, write_bruker_esr_sample, capsys) -> None:
     source_dir = tmp_path / "raw"
     source_dir.mkdir()
-    write_bruker_esr_sample(source_dir / "alpha-0deg-R1.dsc")
-    write_bruker_esr_sample(source_dir / "beta-45deg-R2.dsc")
+    write_bruker_esr_sample(source_dir / "sample-0deg-R1.dsc")
+    write_bruker_esr_sample(source_dir / "sample-45deg-R2.dsc")
     output_dir = tmp_path / "processed" / "esr_batch"
     recipe_path = project_root / "recipes" / "esr" / "default.yaml"
 

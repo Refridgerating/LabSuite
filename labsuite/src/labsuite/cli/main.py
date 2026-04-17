@@ -186,19 +186,29 @@ def _run_modality_batch(spec: ModalityCliSpec, args: argparse.Namespace) -> int:
         else build_default_batch_output_dir(DEFAULT_OUTPUT_ROOT, resolved_input)
     )
     workflow_options = _workflow_options(spec.name, args, batch=True)
-    batch_result = run_batch_workflow(
-        inputs=[resolved_input],
-        recipe_path=args.recipe,
-        output_dir=resolved_output_dir,
-        allowed_suffixes=spec.allowed_suffixes,
-        pattern=args.pattern,
-        recursive=args.recursive,
-        source_label=spec.source_label,
-        run_single_workflow=spec.run_single_workflow,
-        summarize_analysis=spec.summarize_analysis,
-        export_batch_figure=spec.export_batch_figure,
-        workflow_options=workflow_options,
-    )
+    if spec.run_batch_workflow is not None:
+        batch_result = spec.run_batch_workflow(
+            inputs=[resolved_input],
+            recipe_path=args.recipe,
+            output_dir=resolved_output_dir,
+            pattern=args.pattern,
+            recursive=args.recursive,
+            **workflow_options,
+        )
+    else:
+        batch_result = run_batch_workflow(
+            inputs=[resolved_input],
+            recipe_path=args.recipe,
+            output_dir=resolved_output_dir,
+            allowed_suffixes=spec.allowed_suffixes,
+            pattern=args.pattern,
+            recursive=args.recursive,
+            source_label=spec.source_label,
+            run_single_workflow=spec.run_single_workflow,
+            summarize_analysis=spec.summarize_analysis,
+            export_batch_figure=spec.export_batch_figure,
+            workflow_options=workflow_options,
+        )
     _print_batch_result(batch_result)
     return 0
 

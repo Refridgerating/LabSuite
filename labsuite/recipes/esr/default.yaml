@@ -17,3 +17,6 @@ integration_baseline_window_min_half_width_mT: 6.0
 integration_detected_window_padding_width_multiplier: 10.0 #secondary lever to adjust window size
 fit_max_gamma_as_sweep_fraction: 0.5
 fit_local_disagreement_ratio_threshold: 0.35
+batch_qc_nrmse_max: 0.12
+batch_qc_edge_guard_min_mT: 2.0
+batch_qc_edge_guard_gamma_multiplier: 2.0

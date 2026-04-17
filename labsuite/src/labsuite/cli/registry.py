@@ -18,6 +18,7 @@ from labsuite.plugins.vsm.service import (
     export_vsm_batch_overlay_figure,
     export_vsm_bundle_from_json,
 )
+from labsuite.workflows.batch_folder import run_esr_batch_workflow
 from labsuite.workflows.single_file import (
     run_esr_single_file_workflow,
     run_fmr_single_file_workflow,
@@ -42,6 +43,7 @@ class ModalityCliSpec:
     export_from_json: Callable[[Path, Path | None], dict[str, Path]]
     build_report: Callable[[Path, Path | None, bool], Path]
     export_batch_figure: Callable[[list[Any], Path], dict[str, Path]] | None = None
+    run_batch_workflow: Callable[..., Any] | None = None
 
 
 def summarize_esr_analysis(analysis) -> dict[str, Any]:
@@ -121,6 +123,7 @@ MODALITY_SPECS: dict[str, ModalityCliSpec] = {
         export_from_json=export_esr_bundle_from_json,
         build_report=build_esr_report_entry,
         export_batch_figure=export_esr_batch_overlay_figure,
+        run_batch_workflow=run_esr_batch_workflow,
     ),
     "vsm": ModalityCliSpec(
         name="vsm",
