@@ -6,6 +6,7 @@ import json
 from pathlib import Path
 from typing import Any
 
+from labsuite.core.resonance_metrics import ResonanceModeMetrics
 from labsuite.core.types import AnalysisResult
 
 
@@ -68,6 +69,10 @@ def _analysis_result_to_dict(result: AnalysisResult) -> dict[str, Any]:
             "fit_local_disagreement_flag": result.fit_local_disagreement_flag,
             "fit_local_disagreement_reason": result.fit_local_disagreement_reason,
         },
+        "resonance_metrics": {
+            "config": result.resonance_metrics_config,
+            "modes": [_resonance_mode_metrics_to_dict(item) for item in result.resonance_metrics],
+        },
         "fit_selection": {
             "selected_mode": result.selected_mode,
             "decision": {
@@ -95,6 +100,10 @@ def _analysis_result_to_dict(result: AnalysisResult) -> dict[str, Any]:
             "local_peaks": [_integral_summary_to_dict(item) for item in result.local_peak_integrals],
         },
     }
+
+
+def _resonance_mode_metrics_to_dict(result: ResonanceModeMetrics) -> dict[str, Any]:
+    return result.to_dict()
 
 
 def _fit_result_to_dict(result) -> dict[str, Any]:

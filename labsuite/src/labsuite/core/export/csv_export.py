@@ -5,6 +5,7 @@ from __future__ import annotations
 import csv
 from pathlib import Path
 
+from labsuite.core.resonance_metrics import flatten_resonance_metrics
 from labsuite.core.types import AnalysisResult, FitResult, PeakFitResult
 
 
@@ -162,8 +163,33 @@ def export_analysis_summary_csv(result: AnalysisResult, destination: Path) -> Pa
         "window_trough_field_mT",
         "window_prominence",
         "window_width_mT",
+        "owner_kind",
+        "owner_id",
+        "resonance_metrics_success",
+        "resonance_metrics_failure_reason",
+        "hres",
+        "peak_field_abs",
+        "peak_height_abs",
+        "half_max_level",
+        "h_left_half",
+        "h_right_half",
+        "fwhm",
+        "hwhm_left",
+        "hwhm_right",
+        "asymmetry_ratio",
+        "area_pm_1fwhm",
+        "area_pm_2fwhm",
+        "area_pm_3fwhm",
+        "area_full",
+        "support_start_field_mT",
+        "support_end_field_mT",
+        "local_baseline_edge_points",
+        "local_baseline_slope",
+        "local_baseline_intercept",
+        "signal_polarity",
     ]
 
+    metrics_by_target = {item.owner_id: flatten_resonance_metrics(item) for item in result.resonance_metrics}
     rows: list[dict[str, object]] = []
     if result.single_fit is not None:
         rows.append(
@@ -172,6 +198,7 @@ def export_analysis_summary_csv(result: AnalysisResult, destination: Path) -> Pa
                 mode="single",
                 fit=result.single_fit,
                 result=result,
+                resonance_metrics=metrics_by_target.get("selected"),
             )
         )
     for peak_fit in result.peak_fits:
@@ -182,6 +209,7 @@ def export_analysis_summary_csv(result: AnalysisResult, destination: Path) -> Pa
                 fit=peak_fit.fit,
                 result=result,
                 peak_fit=peak_fit,
+                resonance_metrics=metrics_by_target.get(peak_fit.label),
             )
         )
     if result.selected_mode == "split" and result.peak_fits:
@@ -206,6 +234,7 @@ def _fit_summary_row(
     fit: FitResult,
     result: AnalysisResult,
     peak_fit: PeakFitResult | None = None,
+    resonance_metrics: dict[str, object] | None = None,
 ) -> dict[str, object]:
     row: dict[str, object] = {
         "target": target,
@@ -260,6 +289,8 @@ def _fit_summary_row(
         "window_prominence": None if peak_fit is None else peak_fit.window.prominence,
         "window_width_mT": None if peak_fit is None else peak_fit.window.width_mT,
     }
+    if resonance_metrics is not None:
+        row.update(resonance_metrics)
     for parameter_name in ("amplitude", "center_mT", "gamma_mT", "offset"):
         diagnostic = fit.parameter_diagnostics.get(parameter_name)
         row[parameter_name] = None if diagnostic is None else diagnostic.value

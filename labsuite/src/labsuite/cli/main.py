@@ -9,6 +9,7 @@ from typing import Literal, Sequence
 from labsuite import __version__
 from labsuite.cli.registry import DEFAULT_OUTPUT_ROOT, MODALITY_SPECS, ModalityCliSpec
 from labsuite.core.exceptions import LabSuiteError, WorkflowError
+from labsuite.core.resonance_metrics import ResonanceMetricsConfig, parse_area_window_multipliers
 from labsuite.workflows.batch_folder import run_esr_batch_workflow
 from labsuite.workflows.measurement_batch import (
     BatchRunResult,
@@ -51,6 +52,7 @@ def build_parser() -> argparse.ArgumentParser:
     esr_parser.add_argument("--output-dir", type=Path, default=None)
     esr_parser.add_argument("--fit-mode", choices=("auto", "single", "split"), default=None)
     esr_parser.add_argument("--show-raw", action="store_true")
+    _add_resonance_metrics_arguments(esr_parser)
     return parser
 
 
@@ -68,6 +70,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 output_dir=args.output_dir,
                 fit_mode=args.fit_mode,
                 show_raw=args.show_raw,
+                resonance_metrics_config=_build_resonance_metrics_config(args),
             )
         if args.command == "fit-batch":
             return _run_fit_batch_command(
@@ -77,6 +80,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 pattern=args.pattern,
                 recursive=args.recursive,
                 fit_mode=args.fit_mode,
+                resonance_metrics_config=_build_resonance_metrics_config(args),
             )
         if args.command == "esr-single":
             return _run_legacy_esr_single_command(
@@ -85,6 +89,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 output_dir=args.output_dir,
                 fit_mode=args.fit_mode,
                 show_raw=args.show_raw,
+                resonance_metrics_config=_build_resonance_metrics_config(args),
             )
         raise SystemExit(f"Unsupported command: {args.command}")
     except LabSuiteError as exc:
@@ -101,6 +106,8 @@ def _add_modality_subcommands(parser: argparse.ArgumentParser, spec: ModalityCli
     if spec.name == "esr":
         single_parser.add_argument("--fit-mode", choices=("auto", "single", "split"), default=None)
         single_parser.add_argument("--show-raw", action="store_true")
+    if spec.name in {"esr", "fmr"}:
+        _add_resonance_metrics_arguments(single_parser)
 
     batch_parser = subparsers.add_parser("batch", help=f"Run {spec.name.upper()} analyses in batch.")
     batch_parser.add_argument("--input", dest="input_path", required=True, type=Path)
@@ -110,6 +117,8 @@ def _add_modality_subcommands(parser: argparse.ArgumentParser, spec: ModalityCli
     batch_parser.add_argument("--output-dir", type=Path, default=None)
     if spec.name == "esr":
         batch_parser.add_argument("--fit-mode", choices=("auto", "single", "split"), default=None)
+    if spec.name in {"esr", "fmr"}:
+        _add_resonance_metrics_arguments(batch_parser)
 
     config_parser = subparsers.add_parser("config", help=f"Print or write the default {spec.name.upper()} recipe.")
     config_parser.add_argument("--output", type=Path, default=None)
@@ -128,6 +137,38 @@ def _add_shared_fit_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--recipe", type=Path, default=MODALITY_SPECS["esr"].default_recipe)
     parser.add_argument("--output-dir", type=Path, default=None)
     parser.add_argument("--fit-mode", choices=("auto", "single", "split"), default=None)
+    _add_resonance_metrics_arguments(parser)
+
+
+def _add_resonance_metrics_arguments(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "--compute-resonance-metrics",
+        dest="compute_resonance_metrics",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+    )
+    parser.add_argument(
+        "--area-window-mode",
+        choices=("side-aware", "symmetric"),
+        default="side-aware",
+    )
+    parser.add_argument(
+        "--area-window-multipliers",
+        default="1,2,3",
+        help="Comma-separated FWHM multipliers for windowed areas.",
+    )
+    parser.add_argument("--compute-full-area", action="store_true")
+    parser.add_argument(
+        "--report-asymmetry",
+        dest="report_asymmetry",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+    )
+    parser.add_argument("--halfmax-interp", choices=("linear",), default="linear")
+    parser.add_argument("--metrics-from", choices=("reconstructed_absorption",), default="reconstructed_absorption")
+    parser.add_argument("--export-resonance-metrics", action="store_true")
+    parser.add_argument("--plot-halfmax-markers", action="store_true")
+    parser.add_argument("--plot-area-windows", action="store_true")
 
 
 def _add_fit_single_arguments(parser: argparse.ArgumentParser) -> None:
@@ -252,12 +293,29 @@ def _run_modality_report(
 
 
 def _workflow_options(modality: str, args: argparse.Namespace, *, batch: bool = False) -> dict[str, object]:
-    if modality != "esr":
+    if modality not in {"esr", "fmr"}:
         return {}
-    options: dict[str, object] = {"fit_mode": getattr(args, "fit_mode", None)}
-    if not batch:
-        options["show_raw"] = bool(getattr(args, "show_raw", False))
+    options: dict[str, object] = {"resonance_metrics_config": _build_resonance_metrics_config(args)}
+    if modality == "esr":
+        options["fit_mode"] = getattr(args, "fit_mode", None)
+        if not batch:
+            options["show_raw"] = bool(getattr(args, "show_raw", False))
     return options
+
+
+def _build_resonance_metrics_config(args: argparse.Namespace) -> ResonanceMetricsConfig:
+    return ResonanceMetricsConfig(
+        compute_resonance_metrics=bool(getattr(args, "compute_resonance_metrics", True)),
+        area_window_mode=getattr(args, "area_window_mode", "side-aware"),
+        area_window_multipliers=parse_area_window_multipliers(getattr(args, "area_window_multipliers", "1,2,3")),
+        compute_full_area=bool(getattr(args, "compute_full_area", False)),
+        report_asymmetry=bool(getattr(args, "report_asymmetry", True)),
+        halfmax_interp=getattr(args, "halfmax_interp", "linear"),
+        metrics_from=getattr(args, "metrics_from", "reconstructed_absorption"),
+        export_resonance_metrics=bool(getattr(args, "export_resonance_metrics", False)),
+        plot_halfmax_markers=bool(getattr(args, "plot_halfmax_markers", False)),
+        plot_area_windows=bool(getattr(args, "plot_area_windows", False)),
+    )
 
 
 def _run_fit_single_command(
@@ -267,6 +325,7 @@ def _run_fit_single_command(
     output_dir: Path | None,
     fit_mode: Literal["auto", "single", "split"] | None,
     show_raw: bool,
+    resonance_metrics_config: ResonanceMetricsConfig,
 ) -> int:
     try:
         source_file = resolve_single_source(
@@ -291,6 +350,7 @@ def _run_fit_single_command(
         output_dir=resolved_output_dir,
         fit_mode=fit_mode,
         show_raw=show_raw,
+        resonance_metrics_config=resonance_metrics_config,
     )
     _print_single_result("esr", analysis, artifacts)
     return 0
@@ -304,6 +364,7 @@ def _run_fit_batch_command(
     pattern: str,
     recursive: bool,
     fit_mode: Literal["auto", "single", "split"] | None,
+    resonance_metrics_config: ResonanceMetricsConfig,
 ) -> int:
     resolved_input = input_path.resolve()
     resolved_output_dir = (
@@ -318,6 +379,7 @@ def _run_fit_batch_command(
         pattern=pattern,
         recursive=recursive,
         fit_mode=fit_mode,
+        resonance_metrics_config=resonance_metrics_config,
     )
     _print_batch_result(batch_result)
     return 0
@@ -330,6 +392,7 @@ def _run_legacy_esr_single_command(
     output_dir: Path | None,
     fit_mode: Literal["auto", "single", "split"] | None,
     show_raw: bool,
+    resonance_metrics_config: ResonanceMetricsConfig,
 ) -> int:
     resolved_source_file = source_file.resolve()
     resolved_output_dir = output_dir.resolve() if output_dir else DEFAULT_OUTPUT_ROOT / resolved_source_file.stem
@@ -339,6 +402,7 @@ def _run_legacy_esr_single_command(
         output_dir=resolved_output_dir,
         fit_mode=fit_mode,
         show_raw=show_raw,
+        resonance_metrics_config=resonance_metrics_config,
     )
     _print_single_result("esr", analysis, artifacts)
     return 0
@@ -415,6 +479,8 @@ def _print_batch_result(batch_result: BatchRunResult) -> None:
     print(f"Results folder: {batch_result.output_dir}")
     print(f"Batch summary: {batch_result.summary_csv_path}")
     print(f"Batch manifest: {batch_result.manifest_json_path}")
+    if batch_result.resonance_metrics_csv_path is not None:
+        print(f"Batch resonance metrics: {batch_result.resonance_metrics_csv_path}")
     for name, path in sorted(batch_result.batch_figure_paths.items()):
         print(f"Batch figure [{name}]: {path}")
 

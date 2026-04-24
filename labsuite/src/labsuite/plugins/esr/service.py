@@ -9,6 +9,11 @@ import numpy as np
 
 from labsuite.core.preprocessing import cumulative_integral, scalar_integral
 from labsuite.core.recipes import EsrPreprocessingRecipe, load_esr_recipe
+from labsuite.core.resonance_metrics import (
+    ResonanceMetricsConfig,
+    ResonanceModeMetrics,
+    compute_absorption_mode_metrics,
+)
 from labsuite.core.types import (
     AnalysisResult,
     FitAttemptRecord,
@@ -43,11 +48,13 @@ def analyze_esr_file(
     source_path: Path,
     recipe_path: Path,
     fit_mode: Literal["auto", "single", "split"] | None = None,
+    resonance_metrics_config: ResonanceMetricsConfig | None = None,
 ) -> AnalysisResult:
     """Run the ESR parse, preprocess, and fit stages for one source file."""
 
     dataset = parse_esr_file(source_path.resolve())
     recipe = load_esr_recipe(recipe_path)
+    metrics_config = resonance_metrics_config or ResonanceMetricsConfig()
     requested_fit_mode = fit_mode or recipe.fit_mode
     processed, derivative_baseline = apply_esr_preprocessing(dataset, recipe)
     integrated, absorption_baseline = integrate_esr_trace(processed, recipe)
@@ -246,6 +253,15 @@ def analyze_esr_file(
         diagnostic_absorption_signal=integrated.absorption_signal,
         diagnostic_area_signal=integrated.area_signal,
     )
+    resonance_metrics = _compute_selected_resonance_metrics(
+        trace=processed,
+        selected_mode=selected_mode,
+        single_fit=single_fit,
+        peak_fits=selected_peak_fits,
+        local_total_integral=local_total_integral,
+        local_peak_integrals=selected_peak_local_integrals,
+        config=metrics_config,
+    )
 
     return AnalysisResult(
         dataset=dataset,
@@ -275,6 +291,8 @@ def analyze_esr_file(
         fit_local_disagreement_reason=fit_local_disagreement_reason,
         recipe_name=recipe.name,
         recipe_config=recipe.to_dict(),
+        resonance_metrics_config=metrics_config.to_dict(),
+        resonance_metrics=resonance_metrics,
     )
 
 
@@ -523,6 +541,59 @@ def _build_diagnostic_integral_summary(
         baseline_polyorder=None,
         integration_window_clipped_by_detected_window=False,
     )
+
+
+def _compute_selected_resonance_metrics(
+    *,
+    trace: ProcessedTrace,
+    selected_mode: Literal["single", "split"],
+    single_fit: FitResult | None,
+    peak_fits: list[PeakFitResult],
+    local_total_integral: IntegralSummary,
+    local_peak_integrals: list[IntegralSummary],
+    config: ResonanceMetricsConfig,
+) -> list[ResonanceModeMetrics]:
+    if not config.compute_resonance_metrics:
+        return []
+    if selected_mode == "single":
+        if single_fit is None:
+            return []
+        curves = _build_fit_integrated_curves(trace, single_fit)
+        if curves is None:
+            return []
+        return [
+            compute_absorption_mode_metrics(
+                curves.field_mT,
+                curves.absorption_signal,
+                hres=float(single_fit.parameters["center_mT"]),
+                config=config,
+                support_start_field_mT=local_total_integral.start_field_mT,
+                support_end_field_mT=local_total_integral.end_field_mT,
+                owner_kind="selected",
+                owner_id="selected",
+                metadata={"mode": "single", "model_name": single_fit.model_name},
+            )
+        ]
+
+    metrics: list[ResonanceModeMetrics] = []
+    for peak_fit, local_summary in zip(peak_fits, local_peak_integrals, strict=True):
+        curves = _build_fit_integrated_curves(trace, peak_fit.fit)
+        if curves is None:
+            continue
+        metrics.append(
+            compute_absorption_mode_metrics(
+                curves.field_mT,
+                curves.absorption_signal,
+                hres=float(peak_fit.fit.parameters["center_mT"]),
+                config=config,
+                support_start_field_mT=local_summary.start_field_mT,
+                support_end_field_mT=local_summary.end_field_mT,
+                owner_kind="peak_fit",
+                owner_id=peak_fit.label,
+                metadata={"mode": "split", "model_name": peak_fit.fit.model_name},
+            )
+        )
+    return metrics
 
 
 def _rename_local_integrated_curves(

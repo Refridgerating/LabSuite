@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any, Callable, Sequence
 
 from labsuite.core.exceptions import LabSuiteError, WorkflowError
+from labsuite.core.resonance_metrics import ResonanceMetricsConfig, flatten_resonance_metrics
 from labsuite.workflows.single_file import WorkflowArtifacts
 
 
@@ -40,6 +41,7 @@ class BatchRunResult:
     summary_csv_path: Path
     manifest_json_path: Path
     batch_figure_paths: dict[str, Path] = field(default_factory=dict)
+    resonance_metrics_csv_path: Path | None = None
 
 
 def discover_source_files(
@@ -191,6 +193,7 @@ def run_batch_workflow(
         successful_analyses.append(analysis)
 
     batch_figure_paths = {} if export_batch_figure is None else export_batch_figure(successful_analyses, output_dir)
+    resonance_metrics_csv_path = _maybe_export_batch_resonance_metrics(successful_analyses, output_dir, options)
     all_items = sorted([*succeeded_items, *failed_items], key=lambda item: str(item.source_path).lower())
     summary_csv_path, manifest_json_path = write_batch_outputs(
         inputs=resolved_inputs,
@@ -199,6 +202,7 @@ def run_batch_workflow(
         output_dir=output_dir,
         items=all_items,
         batch_figure_paths=batch_figure_paths,
+        resonance_metrics_csv_path=resonance_metrics_csv_path,
     )
     return BatchRunResult(
         discovered_sources=discovered_sources,
@@ -208,6 +212,7 @@ def run_batch_workflow(
         summary_csv_path=summary_csv_path,
         manifest_json_path=manifest_json_path,
         batch_figure_paths=batch_figure_paths,
+        resonance_metrics_csv_path=resonance_metrics_csv_path,
     )
 
 
@@ -219,6 +224,7 @@ def write_batch_outputs(
     output_dir: Path,
     items: Sequence[BatchItemResult],
     batch_figure_paths: dict[str, Path],
+    resonance_metrics_csv_path: Path | None = None,
 ) -> tuple[Path, Path]:
     """Write batch summary and manifest artifacts for a completed run."""
 
@@ -232,6 +238,7 @@ def write_batch_outputs(
         output_dir=output_dir,
         items=items,
         batch_figure_paths=batch_figure_paths,
+        resonance_metrics_csv_path=resonance_metrics_csv_path,
         destination=manifest_json_path,
     )
     return summary_csv_path, manifest_json_path
@@ -294,6 +301,7 @@ def _write_batch_manifest_json(
     output_dir: Path,
     items: Sequence[BatchItemResult],
     batch_figure_paths: dict[str, Path],
+    resonance_metrics_csv_path: Path | None,
     destination: Path,
 ) -> None:
     serialized_batch_figures = {
@@ -312,6 +320,7 @@ def _write_batch_manifest_json(
         "output_dir": str(output_dir),
         "batch_figures": serialized_batch_figures,
         "batch_figure_png": batch_figure_png,
+        "batch_resonance_metrics_csv": None if resonance_metrics_csv_path is None else str(resonance_metrics_csv_path),
         "items": [
             {
                 "source_file": str(item.source_path),
@@ -330,3 +339,52 @@ def _write_batch_manifest_json(
         "failed_count": sum(1 for item in items if item.status == "failed"),
     }
     destination.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+
+
+def _maybe_export_batch_resonance_metrics(
+    analyses: Sequence[Any],
+    output_dir: Path,
+    options: dict[str, Any],
+) -> Path | None:
+    config = options.get("resonance_metrics_config")
+    if not isinstance(config, ResonanceMetricsConfig) or not config.export_resonance_metrics:
+        return None
+    rows = _collect_batch_resonance_metric_rows(analyses)
+    if not rows:
+        return None
+    destination = output_dir / "batch_resonance_metrics.csv"
+    fieldnames = sorted({key for row in rows for key in row})
+    with destination.open("w", encoding="utf-8", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=fieldnames)
+        writer.writeheader()
+        for row in rows:
+            writer.writerow(row)
+    return destination
+
+
+def _collect_batch_resonance_metric_rows(analyses: Sequence[Any]) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    for analysis in analyses:
+        if hasattr(analysis, "dataset") and hasattr(analysis, "resonance_metrics"):
+            for metrics in getattr(analysis, "resonance_metrics", []):
+                rows.append(
+                    {
+                        "modality": "esr",
+                        "source_file": str(analysis.dataset.source_path),
+                        "source_stem": analysis.dataset.source_path.stem,
+                        **flatten_resonance_metrics(metrics),
+                    }
+                )
+            continue
+        measurement = getattr(analysis, "measurement", None)
+        payload = getattr(analysis, "analysis_payload", {})
+        for metrics in payload.get("resonance_metrics", []):
+            rows.append(
+                {
+                    "modality": getattr(measurement, "modality", ""),
+                    "source_file": "" if measurement is None else str(measurement.source_path),
+                    "source_stem": "" if measurement is None else measurement.source_path.stem,
+                    **metrics,
+                }
+            )
+    return rows

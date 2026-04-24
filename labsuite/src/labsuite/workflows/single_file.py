@@ -11,6 +11,7 @@ from labsuite.core.export import (
     export_analysis_figure,
     export_analysis_json,
 )
+from labsuite.core.resonance_metrics import ResonanceMetricsConfig
 from labsuite.core.types import AnalysisResult
 from labsuite.plugins.fmr.service import (
     analyze_fmr_file,
@@ -48,11 +49,17 @@ def run_esr_single_file_workflow(
     *,
     fit_mode: Literal["auto", "single", "split"] | None = None,
     show_raw: bool = False,
+    resonance_metrics_config: ResonanceMetricsConfig | None = None,
 ) -> tuple[AnalysisResult, WorkflowArtifacts]:
     """Execute the first ESR-only end-to-end workflow."""
 
     output_dir.mkdir(parents=True, exist_ok=True)
-    analysis = analyze_esr_file(source_path=source_path, recipe_path=recipe_path, fit_mode=fit_mode)
+    analysis = analyze_esr_file(
+        source_path=source_path,
+        recipe_path=recipe_path,
+        fit_mode=fit_mode,
+        resonance_metrics_config=resonance_metrics_config,
+    )
 
     stem = source_path.stem
     artifacts = WorkflowArtifacts(
@@ -107,11 +114,17 @@ def run_fmr_single_file_workflow(
     source_path: Path,
     recipe_path: Path,
     output_dir: Path,
+    *,
+    resonance_metrics_config: ResonanceMetricsConfig | None = None,
 ) -> tuple[object, WorkflowArtifacts]:
     """Execute the first FMR single-file workflow."""
 
     output_dir.mkdir(parents=True, exist_ok=True)
-    analysis = analyze_fmr_file(source_path=source_path, recipe_path=recipe_path)
+    analysis = analyze_fmr_file(
+        source_path=source_path,
+        recipe_path=recipe_path,
+        resonance_metrics_config=resonance_metrics_config,
+    )
 
     stem = source_path.stem
     artifacts = WorkflowArtifacts(

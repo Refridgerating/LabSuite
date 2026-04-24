@@ -93,6 +93,11 @@ def test_esr_service_analyzes_single_file(tmp_path, project_root, write_bruker_e
         assert np.all(np.isnan(result.local_integrated.area_signal[~local_mask]))
     assert result.fit_local_disagreement_flag is False
     assert "center_mT" in result.single_fit.parameter_diagnostics
+    assert result.resonance_metrics_config["compute_resonance_metrics"] is True
+    assert len(result.resonance_metrics) == 1
+    assert result.resonance_metrics[0].success is True
+    assert result.resonance_metrics[0].owner_id == "selected"
+    assert result.resonance_metrics[0].hres == pytest.approx(result.single_fit.parameters["center_mT"])
 
 
 def test_esr_service_selects_split_mode_for_double_peak(tmp_path, project_root, write_bruker_esr_sample) -> None:
@@ -131,6 +136,7 @@ def test_esr_service_selects_split_mode_for_double_peak(tmp_path, project_root, 
     assert all(peak.fit.feature_summary is not None for peak in result.peak_fits)
     assert all(peak.fit.residual_summary.rmse >= 0.0 for peak in result.peak_fits)
     assert all(peak.fit.feature_summary.integrated_intensity_proxy == pytest.approx(integral.area_integral) for peak, integral in zip(result.peak_fits, result.peak_integrals, strict=True))
+    assert {item.owner_id for item in result.resonance_metrics} == {"peak_1", "peak_2"}
 
 
 def test_split_local_curves_stitch_cumulatively_for_isolated_windows(project_root) -> None:

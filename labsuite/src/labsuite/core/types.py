@@ -9,6 +9,8 @@ from typing import Any, Literal
 import numpy as np
 from numpy.typing import NDArray
 
+from labsuite.core.resonance_metrics import ResonanceModeMetrics
+
 FloatArray = NDArray[np.float64]
 
 
@@ -244,3 +246,5 @@ class AnalysisResult:
     fit_local_disagreement_reason: str | None
     recipe_name: str
     recipe_config: dict[str, Any]
+    resonance_metrics_config: dict[str, Any] = field(default_factory=dict)
+    resonance_metrics: list[ResonanceModeMetrics] = field(default_factory=list)

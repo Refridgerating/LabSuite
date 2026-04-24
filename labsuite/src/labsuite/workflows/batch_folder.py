@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Literal, Sequence
 
 from labsuite.core.recipes import load_esr_recipe
+from labsuite.core.resonance_metrics import ResonanceMetricsConfig
 from labsuite.plugins.esr.batch_qc import (
     EsrBatchQcRecord,
     compute_esr_qc_metrics,
@@ -67,6 +68,7 @@ def run_esr_batch_workflow(
     recursive: bool = False,
     fit_mode: Literal["auto", "single", "split"] | None = None,
     show_raw: bool = False,
+    resonance_metrics_config: ResonanceMetricsConfig | None = None,
 ) -> BatchRunResult:
     """Run the ESR workflow across every discovered source file."""
 
@@ -84,6 +86,7 @@ def run_esr_batch_workflow(
         workflow_options={
             "fit_mode": fit_mode,
             "show_raw": show_raw,
+            "resonance_metrics_config": resonance_metrics_config,
         },
     )
 
@@ -111,6 +114,7 @@ def run_esr_batch_workflow(
         output_dir=output_dir,
         items=all_items,
         batch_figure_paths=batch_result.batch_figure_paths,
+        resonance_metrics_csv_path=batch_result.resonance_metrics_csv_path,
     )
     return batch_result
 
@@ -127,6 +131,8 @@ def _summarize_esr_analysis(analysis) -> dict[str, object]:
         "fit_local_disagreement_ratio": analysis.fit_local_disagreement_ratio,
         "fit_local_disagreement_flag": analysis.fit_local_disagreement_flag,
         "fit_local_disagreement_reason": analysis.fit_local_disagreement_reason,
+        "resonance_metrics_mode_count": len(getattr(analysis, "resonance_metrics", [])),
+        "resonance_metrics_failure_count": sum(1 for item in getattr(analysis, "resonance_metrics", []) if not item.success),
     }
 
 

@@ -9,6 +9,7 @@ from typing import Any
 import numpy as np
 from numpy.typing import NDArray
 
+from labsuite.core.resonance_metrics import ResonanceModeMetrics
 from labsuite.core.types import ConvergenceSummary, ParameterDiagnostic, ResidualSummary
 
 FloatArray = NDArray[np.float64]
@@ -85,6 +86,7 @@ class FmrComponentFitResult:
     amplitude_antisymmetric: float
     field_mT: FloatArray
     component_signal: FloatArray
+    absorption_signal: FloatArray | None = None
     parameter_diagnostics: dict[str, ParameterDiagnostic] = field(default_factory=dict)
     bound_hits: dict[str, bool] = field(default_factory=dict)
     accepted: bool = False
@@ -99,6 +101,7 @@ class FmrComponentFitResult:
     acceptance_checks: dict[str, bool] = field(default_factory=dict)
     warnings: list[str] = field(default_factory=list)
     metadata: dict[str, Any] = field(default_factory=dict)
+    resonance_metrics: ResonanceModeMetrics | None = None
 
 
 @dataclass(slots=True)
@@ -170,6 +173,7 @@ class FmrTraceFitResult:
     preprocessing_steps: list[dict[str, Any]] = field(default_factory=list)
     baseline_summary: dict[str, Any] | None = None
     metadata: dict[str, Any] = field(default_factory=dict)
+    resonance_metrics: list[ResonanceModeMetrics] = field(default_factory=list)
 
 
 @dataclass(slots=True)

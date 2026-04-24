@@ -55,6 +55,9 @@ def test_esr_single_file_cli_exports_all_artifacts(tmp_path, project_root, write
     assert payload["integral_summaries"]["local_total"]["integration_kind"] == "primary_local_window"
     assert payload["integral_summaries"]["diagnostic_total"]["integration_kind"] == "diagnostic_full_span"
     assert "qc" in payload
+    assert payload["resonance_metrics"]["config"]["compute_resonance_metrics"] is True
+    assert len(payload["resonance_metrics"]["modes"]) == 1
+    assert payload["resonance_metrics"]["modes"][0]["hres"] is not None
     assert "single_fit_attempts" in payload["fit_selection"]
     assert len(payload["fit_selection"]["single_fit_attempts"]) == 1
     assert payload["fit_selection"]["single_fit_attempts"][0]["scope"] == "global_full_trace"
@@ -89,6 +92,8 @@ def test_esr_single_file_cli_exports_all_artifacts(tmp_path, project_root, write
     assert "fit_local_windowed_intensity_proxy" in summary_header
     assert "local_windowed_intensity_proxy" in summary_header
     assert "fit_local_disagreement_flag" in summary_header
+    assert "hres" in summary_header
+    assert "asymmetry_ratio" in summary_header
 
 
 def test_esr_single_file_cli_forced_split_exports_components(tmp_path, project_root, write_bruker_esr_sample) -> None:

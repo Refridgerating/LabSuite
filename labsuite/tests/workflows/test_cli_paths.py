@@ -103,6 +103,34 @@ def test_fit_batch_accepts_folder_input(tmp_path, project_root, write_bruker_esr
     assert (output_dir / "sample-45deg-R1" / "sample-45deg-R1_analysis.json").exists()
 
 
+def test_fit_batch_can_export_batch_resonance_metrics(tmp_path, project_root, write_bruker_esr_sample) -> None:
+    source_dir = tmp_path / "raw"
+    source_dir.mkdir()
+    write_bruker_esr_sample(source_dir / "sample-0deg-R1.dsc")
+    output_dir = tmp_path / "processed" / "batch_out"
+    recipe_path = project_root / "recipes" / "esr" / "default.yaml"
+
+    exit_code = main(
+        [
+            "fit-batch",
+            "--input",
+            str(source_dir),
+            "--recipe",
+            str(recipe_path),
+            "--output-dir",
+            str(output_dir),
+            "--export-resonance-metrics",
+        ]
+    )
+
+    assert exit_code == 0
+    resonance_csv = output_dir / "batch_resonance_metrics.csv"
+    assert resonance_csv.exists()
+    rows = list(csv.DictReader(resonance_csv.open("r", encoding="utf-8", newline="")))
+    assert rows
+    assert "hres" in rows[0]
+
+
 def test_fit_batch_filters_folder_input_with_pattern(tmp_path, project_root, write_bruker_esr_sample) -> None:
     source_dir = tmp_path / "raw"
     source_dir.mkdir()

@@ -10,6 +10,7 @@ import matplotlib.pyplot as plt
 from matplotlib.font_manager import FontProperties
 from matplotlib.text import Text
 
+from labsuite.core.resonance_metrics import ResonanceAreaWindow, ResonanceModeMetrics
 from labsuite.core.types import AnalysisResult, FitResult, PeakFitResult
 
 
@@ -100,6 +101,7 @@ def export_analysis_figure(
     axes[2].set_title(absorption_title)
     axes[2].set_ylabel("Absorption")
     axes[2].grid(alpha=0.2)
+    _draw_absorption_resonance_metrics(axes[2], result)
     _place_axis_legend_below(axes[2], ncols=1, y_offset=-0.18)
 
     for series in _integrated_curve_series(result):
@@ -116,6 +118,7 @@ def export_analysis_figure(
     axes[3].set_xlabel("Field (mT)")
     axes[3].set_ylabel("Area")
     axes[3].grid(alpha=0.2)
+    _draw_area_window_annotations(axes[3], result)
     _place_axis_legend_below(axes[3], ncols=1, y_offset=-0.24)
 
     figure.savefig(destination, dpi=200)
@@ -248,6 +251,49 @@ def _draw_selected_integration_windows(axis, result: AnalysisResult) -> None:
             color="#c7e9c0",
             alpha=0.25,
         )
+
+
+def _draw_absorption_resonance_metrics(axis, result: AnalysisResult) -> None:
+    if not result.resonance_metrics:
+        return
+    if not result.resonance_metrics_config.get("plot_halfmax_markers", False):
+        return
+    for metrics in result.resonance_metrics:
+        if not metrics.success:
+            continue
+        label_prefix = metrics.owner_id
+        axis.axvline(metrics.hres, color="#111827", linestyle="--", linewidth=1.0, alpha=0.75, label=f"{label_prefix} hres")
+        if metrics.h_left_half is not None:
+            axis.axvline(metrics.h_left_half, color="#0f766e", linestyle=":", linewidth=1.0, alpha=0.75, label=f"{label_prefix} half-max left")
+        if metrics.h_right_half is not None:
+            axis.axvline(metrics.h_right_half, color="#b45309", linestyle=":", linewidth=1.0, alpha=0.75, label=f"{label_prefix} half-max right")
+    if result.resonance_metrics_config.get("plot_area_windows", False):
+        for area_window in _visible_area_windows(result.resonance_metrics):
+            if area_window.start_field_mT is None or area_window.end_field_mT is None:
+                continue
+            axis.axvspan(area_window.start_field_mT, area_window.end_field_mT, color="#fde68a", alpha=0.08)
+
+
+def _draw_area_window_annotations(axis, result: AnalysisResult) -> None:
+    if not result.resonance_metrics:
+        return
+    if not result.resonance_metrics_config.get("plot_area_windows", False):
+        return
+    for area_window in _visible_area_windows(result.resonance_metrics):
+        if area_window.start_field_mT is None or area_window.end_field_mT is None:
+            continue
+        axis.axvspan(area_window.start_field_mT, area_window.end_field_mT, color="#ddd6fe", alpha=0.08)
+
+
+def _visible_area_windows(metrics_records: list[ResonanceModeMetrics]) -> list[ResonanceAreaWindow]:
+    visible: list[ResonanceAreaWindow] = []
+    for metrics in metrics_records:
+        if not metrics.success:
+            continue
+        for area_window in metrics.area_windows:
+            if area_window.area is not None and round(area_window.multiplier, 9) == round(1.0, 9):
+                visible.append(area_window)
+    return visible
 
 
 def _build_summary_text(result: AnalysisResult) -> str:

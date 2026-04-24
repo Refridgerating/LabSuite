@@ -50,6 +50,8 @@ def test_fmr_single_exports_all_artifacts(tmp_path, project_root, write_phasefmr
     assert "trace_fit_results" in payload["analysis_payload"]
     assert "series_collection_result" in payload["analysis_payload"]
     assert "physics_collection_result" in payload["analysis_payload"]
+    assert payload["provenance"]["resonance_metrics_config"]["compute_resonance_metrics"] is True
+    assert payload["analysis_payload"]["resonance_metrics"]
     assert payload["artifacts"]["trace_diagnostics_dir"] == str(diagnostics_dir)
     assert len(payload["artifacts"]["trace_diagnostic_paths"]) == 4
     assert "mode_1" in payload["analysis_payload"]["series_collection_result"]["series_by_label"]
@@ -68,6 +70,8 @@ def test_fmr_single_exports_all_artifacts(tmp_path, project_root, write_phasefmr
     assert "center_feature_disagreement_mT" in summary_rows[0]
     assert "critical_bound_hit_names" in summary_rows[0]
     assert "acceptance_checks" in summary_rows[0]
+    assert "hres" in summary_rows[0]
+    assert "asymmetry_ratio" in summary_rows[0]
 
     series_rows = list(csv.DictReader(series_path.open("r", encoding="utf-8", newline="")))
     assert any(row["series_label"] == "mode_1" for row in series_rows)
@@ -150,3 +154,33 @@ def test_fmr_batch_export_and_report_workflows(tmp_path, project_root, write_pha
     assert "FMR Batch Report" in batch_report_text
     assert "Rejection Reasons" in batch_report_text
     assert "accepted components" in batch_report_text
+
+
+def test_fmr_batch_can_export_resonance_metrics_csv(tmp_path, project_root, write_phasefmr_log) -> None:
+    source_dir = tmp_path / "raw_fmr"
+    source_dir.mkdir()
+    write_phasefmr_log(source_dir / "Temp2-Co-A-2,5to17GHz-R1.log", frequencies_GHz=[8.0, 9.0, 10.0])
+    recipe_path = project_root / "recipes" / "fmr" / "default.yaml"
+    batch_dir = tmp_path / "fmr_batch"
+
+    exit_code = main(
+        [
+            "fmr",
+            "batch",
+            "--input",
+            str(source_dir),
+            "--recipe",
+            str(recipe_path),
+            "--output-dir",
+            str(batch_dir),
+            "--export-resonance-metrics",
+        ]
+    )
+
+    assert exit_code == 0
+    resonance_csv = batch_dir / "batch_resonance_metrics.csv"
+    assert resonance_csv.exists()
+    rows = list(csv.DictReader(resonance_csv.open("r", encoding="utf-8", newline="")))
+    assert rows
+    assert "hres" in rows[0]
+    assert "resonance_metrics_success" in rows[0]

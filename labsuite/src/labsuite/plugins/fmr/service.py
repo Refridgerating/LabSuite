@@ -21,6 +21,12 @@ from labsuite.core.measurement_models import (
     to_serializable,
 )
 from labsuite.core.recipes import FmrRecipe, load_fmr_recipe
+from labsuite.core.resonance_metrics import (
+    ResonanceMetricsConfig,
+    ResonanceModeMetrics,
+    compute_absorption_mode_metrics,
+    flatten_resonance_metrics,
+)
 from labsuite.plugins.fmr.derived import build_fmr_series, fit_fmr_physics
 from labsuite.plugins.fmr.fitters import assess_trace_fit_quality, fit_fmr_trace
 from labsuite.plugins.fmr.models import (
@@ -37,14 +43,20 @@ from labsuite.plugins.fmr.parser import parse_fmr_file
 from labsuite.plugins.fmr.preprocess import apply_fmr_preprocessing
 
 
-def analyze_fmr_file(source_path: Path, recipe_path: Path) -> MeasurementAnalysisResult:
+def analyze_fmr_file(
+    source_path: Path,
+    recipe_path: Path,
+    resonance_metrics_config: ResonanceMetricsConfig | None = None,
+) -> MeasurementAnalysisResult:
     """Run the PhaseFMR-first single-file analysis pipeline."""
 
     file_dataset = parse_fmr_file(source_path.resolve())
     recipe = load_fmr_recipe(recipe_path.resolve())
+    metrics_config = resonance_metrics_config or ResonanceMetricsConfig()
 
     trace_fits: list[FmrTraceFitResult] = []
     processed_traces: list[dict[str, Any]] = []
+    resonance_metrics_rows: list[dict[str, Any]] = []
     warnings = list(file_dataset.warnings)
     for trace in file_dataset.traces:
         selected_trace = _select_signal_channel(trace, recipe.signal_channel)
@@ -55,6 +67,8 @@ def analyze_fmr_file(source_path: Path, recipe_path: Path) -> MeasurementAnalysi
         fit_result.rejection_reason = rejection_reason
         fit_result.warnings.extend(fit_warnings)
         fit_result.metadata["requested_signal_channel"] = recipe.signal_channel
+        _attach_fmr_resonance_metrics(fit_result, config=metrics_config)
+        resonance_metrics_rows.extend(_flatten_trace_resonance_metrics(fit_result))
         processed_traces.append(
             {
                 "trace_id": processed_trace.trace_id,
@@ -139,6 +153,8 @@ def analyze_fmr_file(source_path: Path, recipe_path: Path) -> MeasurementAnalysi
         },
         "warning_count": len(warnings),
         "warnings": warnings,
+        "resonance_metrics_mode_count": len(resonance_metrics_rows),
+        "resonance_metrics_failure_count": sum(1 for item in resonance_metrics_rows if not bool(item.get("resonance_metrics_success"))),
     }
 
     plot_manifest = PlotManifest(
@@ -162,6 +178,7 @@ def analyze_fmr_file(source_path: Path, recipe_path: Path) -> MeasurementAnalysi
         "standardized_traces": to_serializable(file_dataset.traces),
         "processed_traces": to_serializable(processed_traces),
         "trace_fit_results": to_serializable(trace_fits),
+        "resonance_metrics": resonance_metrics_rows,
         "series_collection_result": to_serializable(series_collection),
         "physics_collection_result": to_serializable(physics_collection),
         "series_result": None if legacy_series is None else to_serializable(legacy_series),
@@ -175,6 +192,7 @@ def analyze_fmr_file(source_path: Path, recipe_path: Path) -> MeasurementAnalysi
             "source_format": file_dataset.metadata.get("source_format"),
             "recipe_name": recipe.name,
             "recipe_config": recipe.to_dict(),
+            "resonance_metrics_config": metrics_config.to_dict(),
             "canonical_signal_channel": recipe.signal_channel,
             "trace_fit_model": recipe.trace_fit_model,
             "physics_model": recipe.physics_model,
@@ -224,6 +242,73 @@ def _group_key(
             str(measurement_mode or "unknown"),
         ]
     )
+
+
+def _attach_fmr_resonance_metrics(
+    fit_result: FmrTraceFitResult,
+    *,
+    config: ResonanceMetricsConfig,
+) -> None:
+    if not config.compute_resonance_metrics:
+        fit_result.resonance_metrics = []
+        return
+    metrics: list[ResonanceModeMetrics] = []
+    for component in fit_result.selected_components:
+        if not component.accepted or component.absorption_signal is None:
+            continue
+        support_start, support_end = _component_support_bounds(fit_result, component)
+        metrics_result = compute_absorption_mode_metrics(
+            component.field_mT,
+            component.absorption_signal,
+            hres=component.H_res_mT,
+            config=config,
+            support_start_field_mT=support_start,
+            support_end_field_mT=support_end,
+            owner_kind="component",
+            owner_id=component.component_id or component.component_label,
+            metadata={
+                "trace_id": fit_result.trace_id,
+                "component_label": component.component_label,
+                "component_id": component.component_id,
+                "frequency_GHz": fit_result.frequency_GHz,
+            },
+        )
+        component.resonance_metrics = metrics_result
+        metrics.append(metrics_result)
+    fit_result.resonance_metrics = metrics
+
+
+def _component_support_bounds(
+    fit_result: FmrTraceFitResult,
+    component: FmrComponentFitResult,
+) -> tuple[float, float]:
+    requested_label = component.metadata.get("candidate_window_label")
+    for window in fit_result.candidate_windows:
+        if requested_label and window.label == requested_label:
+            return float(window.start_field_mT), float(window.end_field_mT)
+    if fit_result.candidate_windows:
+        nearest = min(
+            fit_result.candidate_windows,
+            key=lambda window: abs(float(window.candidate_center_mT) - float(component.H_res_mT)),
+        )
+        return float(nearest.start_field_mT), float(nearest.end_field_mT)
+    span = max(float(component.DeltaH_mT) * 3.0, 5.0)
+    return float(component.H_res_mT - span), float(component.H_res_mT + span)
+
+
+def _flatten_trace_resonance_metrics(fit_result: FmrTraceFitResult) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    for metrics in fit_result.resonance_metrics:
+        row = {
+            "trace_id": fit_result.trace_id,
+            "sample_id": fit_result.sample_name,
+            "frequency_GHz": fit_result.frequency_GHz,
+            "angle_deg": fit_result.angle_deg,
+            "temperature_K": fit_result.temperature_K,
+            **flatten_resonance_metrics(metrics),
+        }
+        rows.append(row)
+    return rows
 
 
 def export_fmr_analysis_json(result: MeasurementAnalysisResult, destination: Path) -> Path:
@@ -359,6 +444,30 @@ def export_fmr_summary_csv(result: MeasurementAnalysisResult | dict[str, Any], d
         "warning_count",
         "warnings",
         "included_in_series",
+        "owner_kind",
+        "owner_id",
+        "resonance_metrics_success",
+        "resonance_metrics_failure_reason",
+        "hres",
+        "peak_field_abs",
+        "peak_height_abs",
+        "half_max_level",
+        "h_left_half",
+        "h_right_half",
+        "fwhm",
+        "hwhm_left",
+        "hwhm_right",
+        "asymmetry_ratio",
+        "area_pm_1fwhm",
+        "area_pm_2fwhm",
+        "area_pm_3fwhm",
+        "area_full",
+        "support_start_field_mT",
+        "support_end_field_mT",
+        "local_baseline_edge_points",
+        "local_baseline_slope",
+        "local_baseline_intercept",
+        "signal_polarity",
     ]
 
     collection = payload["analysis_payload"]["series_collection_result"]
@@ -375,6 +484,12 @@ def export_fmr_summary_csv(result: MeasurementAnalysisResult | dict[str, Any], d
             trace_warnings = fit.get("warnings", [])
             for component in fit.get("selected_components", []):
                 component_diagnostics = component.get("parameter_diagnostics", {})
+                resonance_metrics = component.get("resonance_metrics")
+                flattened_metrics = (
+                    {}
+                    if resonance_metrics is None
+                    else flatten_resonance_metrics(ResonanceModeMetrics.from_dict(resonance_metrics))
+                )
                 writer.writerow(
                     {
                         "trace_id": fit["trace_id"],
@@ -422,6 +537,7 @@ def export_fmr_summary_csv(result: MeasurementAnalysisResult | dict[str, Any], d
                         "warning_count": len(trace_warnings) + len(component.get("warnings", [])),
                         "warnings": "|".join([*trace_warnings, *component.get("warnings", [])]),
                         "included_in_series": component.get("component_id") in included_component_ids,
+                        **flattened_metrics,
                     }
                 )
     return destination
@@ -834,6 +950,7 @@ def _trace_fit_from_payload(payload: dict[str, Any]) -> FmrTraceFitResult:
         preprocessing_steps=payload.get("preprocessing_steps", []),
         baseline_summary=payload.get("baseline_summary"),
         metadata=payload.get("metadata", {}),
+        resonance_metrics=[ResonanceModeMetrics.from_dict(item) for item in payload.get("resonance_metrics", [])],
     )
 
 
@@ -871,6 +988,7 @@ def _component_from_payload(payload: dict[str, Any]) -> FmrComponentFitResult:
         amplitude_antisymmetric=float(payload["amplitude_antisymmetric"]),
         field_mT=np.asarray(payload["field_mT"], dtype=float),
         component_signal=np.asarray(payload["component_signal"], dtype=float),
+        absorption_signal=None if payload.get("absorption_signal") is None else np.asarray(payload["absorption_signal"], dtype=float),
         parameter_diagnostics={key: ParameterDiagnostic(**value) for key, value in payload.get("parameter_diagnostics", {}).items()},
         bound_hits=payload.get("bound_hits", {}),
         accepted=payload.get("accepted", False),
@@ -885,6 +1003,7 @@ def _component_from_payload(payload: dict[str, Any]) -> FmrComponentFitResult:
         acceptance_checks=payload.get("acceptance_checks", {}),
         warnings=payload.get("warnings", []),
         metadata=payload.get("metadata", {}),
+        resonance_metrics=None if payload.get("resonance_metrics") is None else ResonanceModeMetrics.from_dict(payload["resonance_metrics"]),
     )
 
 
@@ -1008,31 +1127,49 @@ def _export_single_trace_diagnostic(payload: dict[str, Any], fit: dict[str, Any]
     processed_signal = np.asarray(processed_trace["signal"], dtype=float)
     fitted_signal = np.asarray(fit["fitted_signal"], dtype=float)
     residual = np.asarray(fit["residual"], dtype=float)
+    metrics_config = payload.get("provenance", {}).get("resonance_metrics_config", {})
 
-    figure, axes = plt.subplots(2, 1, figsize=(10.0, 7.0), constrained_layout=True, sharex=True)
+    figure, axes = plt.subplots(3, 1, figsize=(10.0, 9.0), constrained_layout=True, sharex=True)
     axes[0].plot(field, raw_signal, color="#94a3b8", linewidth=1.0, label="Raw")
     axes[0].plot(field, processed_signal, color="#2563eb", linewidth=1.2, label="Processed")
     axes[0].plot(field, fitted_signal, color="#dc2626", linewidth=1.2, linestyle="--", label="Fit")
     for window in fit.get("candidate_windows", []):
         axes[0].axvspan(float(window["start_field_mT"]), float(window["end_field_mT"]), color="#f59e0b", alpha=0.08)
-        axes[0].axvline(float(window["candidate_center_mT"]), color="#f59e0b", linestyle=":", linewidth=0.9)
     component_colors = {"single_unassigned": "#7c3aed", "mode_1": "#047857", "mode_2": "#b91c1c"}
     for component in fit.get("selected_components", []):
         axes[0].plot(field, np.asarray(component["component_signal"], dtype=float), color=component_colors.get(component["component_label"], "#6b7280"), linewidth=1.0, alpha=0.9, label=component["component_label"])
-        axes[0].axvline(float(component["H_res_mT"]), color=component_colors.get(component["component_label"], "#6b7280"), linestyle="--", linewidth=1.0)
+        axes[0].axvline(
+            float(component["H_res_mT"]),
+            color=component_colors.get(component["component_label"], "#6b7280"),
+            linestyle="--",
+            linewidth=1.0,
+            label=f"{component['component_label']} Hres",
+        )
     axes[0].set_ylabel("Signal")
     axes[0].grid(alpha=0.2)
     axes[0].legend(loc="best")
     status = "accepted" if fit.get("accepted") else "rejected"
     axes[0].set_title(f"{fit['sample_name']} | {fit['frequency_GHz']:.3g} GHz | {fit.get('selected_mode')} | {status}")
 
-    axes[1].plot(field, residual, color="#111827", linewidth=1.0, label="Residual")
-    axes[1].axhline(0.0, color="#9ca3af", linewidth=0.9, linestyle="--")
     for component in fit.get("selected_components", []):
-        axes[1].axvline(float(component["H_res_mT"]), color=component_colors.get(component["component_label"], "#6b7280"), linestyle="--", linewidth=1.0)
-    axes[1].set_xlabel("Field (mT)")
-    axes[1].set_ylabel("Residual")
+        absorption_signal = component.get("absorption_signal")
+        if absorption_signal is None:
+            continue
+        corrected_absorption = _correct_component_absorption(np.asarray(field, dtype=float), component)
+        axes[1].plot(field, corrected_absorption, color=component_colors.get(component["component_label"], "#6b7280"), linewidth=1.1, label=f"{component['component_label']} absorption")
+        _annotate_component_resonance_metrics(axes[1], component, metrics_config)
+    axes[1].set_ylabel("Absorption")
     axes[1].grid(alpha=0.2)
+    if fit.get("selected_components"):
+        axes[1].legend(loc="best")
+
+    axes[2].plot(field, residual, color="#111827", linewidth=1.0, label="Residual")
+    axes[2].axhline(0.0, color="#9ca3af", linewidth=0.9, linestyle="--")
+    for component in fit.get("selected_components", []):
+        axes[2].axvline(float(component["H_res_mT"]), color=component_colors.get(component["component_label"], "#6b7280"), linestyle="--", linewidth=1.0)
+    axes[2].set_xlabel("Field (mT)")
+    axes[2].set_ylabel("Residual")
+    axes[2].grid(alpha=0.2)
 
     warnings = fit.get("warnings", [])
     text_lines = [
@@ -1045,16 +1182,22 @@ def _export_single_trace_diagnostic(payload: dict[str, Any], fit: dict[str, Any]
         f"SNR = {_format_value(fit.get('amplitude_snr'))}",
     ]
     for component in fit.get("selected_components", []):
+        metrics = component.get("resonance_metrics") or {}
+        metrics_suffix = ""
+        if metrics.get("fwhm") is not None:
+            metrics_suffix += f" fwhm={_format_value(metrics.get('fwhm'))}"
+        if metrics.get("asymmetry_ratio") is not None:
+            metrics_suffix += f" asym={_format_value(metrics.get('asymmetry_ratio'))}"
         text_lines.append(
-            f"{component['component_label']}: H={_format_value(component.get('H_res_mT'))} dH={_format_value(component.get('DeltaH_mT'))} accepted={component.get('accepted')}"
+            f"{component['component_label']}: H={_format_value(component.get('H_res_mT'))} dH={_format_value(component.get('DeltaH_mT'))} accepted={component.get('accepted')}{metrics_suffix}"
         )
     if warnings:
         text_lines.append(f"warnings = {' | '.join(str(item) for item in warnings)}")
-    axes[1].text(
+    axes[2].text(
         0.02,
         0.98,
         "\n".join(text_lines),
-        transform=axes[1].transAxes,
+        transform=axes[2].transAxes,
         va="top",
         ha="left",
         fontsize=8,
@@ -1064,6 +1207,41 @@ def _export_single_trace_diagnostic(payload: dict[str, Any], fit: dict[str, Any]
 
     figure.savefig(destination, dpi=200)
     plt.close(figure)
+
+
+def _correct_component_absorption(field: np.ndarray, component: dict[str, Any]) -> np.ndarray:
+    absorption_signal = np.asarray(component["absorption_signal"], dtype=float)
+    metrics = component.get("resonance_metrics")
+    if metrics is None:
+        return absorption_signal
+    slope = metrics.get("local_baseline_slope")
+    intercept = metrics.get("local_baseline_intercept")
+    polarity = float(metrics.get("signal_polarity", 1.0))
+    if slope is None or intercept is None:
+        return polarity * absorption_signal
+    return polarity * (absorption_signal - (float(slope) * field + float(intercept)))
+
+
+def _annotate_component_resonance_metrics(axis, component: dict[str, Any], metrics_config: dict[str, Any]) -> None:
+    metrics = component.get("resonance_metrics")
+    if metrics is None or not metrics.get("success"):
+        return
+    color = {"single_unassigned": "#7c3aed", "mode_1": "#047857", "mode_2": "#b91c1c"}.get(component["component_label"], "#6b7280")
+    if metrics_config.get("plot_halfmax_markers", False):
+        axis.axvline(float(metrics["hres"]), color=color, linestyle="--", linewidth=0.9, alpha=0.8)
+        if metrics.get("h_left_half") is not None:
+            axis.axvline(float(metrics["h_left_half"]), color=color, linestyle=":", linewidth=0.9, alpha=0.8)
+        if metrics.get("h_right_half") is not None:
+            axis.axvline(float(metrics["h_right_half"]), color=color, linestyle=":", linewidth=0.9, alpha=0.8)
+    if metrics_config.get("plot_area_windows", False):
+        for area_window in metrics.get("area_windows", []):
+            if round(float(area_window.get("multiplier", 0.0)), 9) != round(1.0, 9):
+                continue
+            start_field = area_window.get("start_field_mT")
+            end_field = area_window.get("end_field_mT")
+            if start_field is None or end_field is None:
+                continue
+            axis.axvspan(float(start_field), float(end_field), color=color, alpha=0.08)
 
 
 def _summarize_rejection_reasons(trace_fits: list[FmrTraceFitResult]) -> list[str]:

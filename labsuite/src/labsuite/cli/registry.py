@@ -58,6 +58,8 @@ def summarize_esr_analysis(analysis) -> dict[str, Any]:
         "fit_local_disagreement_ratio": analysis.fit_local_disagreement_ratio,
         "fit_local_disagreement_flag": analysis.fit_local_disagreement_flag,
         "fit_local_disagreement_reason": analysis.fit_local_disagreement_reason,
+        "resonance_metrics_mode_count": len(getattr(analysis, "resonance_metrics", [])),
+        "resonance_metrics_failure_count": sum(1 for item in getattr(analysis, "resonance_metrics", []) if not item.success),
     }
 
 

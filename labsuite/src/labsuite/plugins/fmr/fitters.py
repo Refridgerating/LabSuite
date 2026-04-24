@@ -28,6 +28,19 @@ def double_mixed_derivative_lorentzian(field_mT: np.ndarray, H_res_1_mT: float, 
     return _component(field_mT, H_res_1_mT, DeltaH_1_mT, amplitude_symmetric_1, amplitude_antisymmetric_1) + _component(field_mT, H_res_2_mT, DeltaH_2_mT, amplitude_symmetric_2, amplitude_antisymmetric_2) + baseline_offset + baseline_slope * field_mT
 
 
+def mixed_absorption_lorentzian(field_mT: np.ndarray, H_res_mT: float, DeltaH_mT: float, amplitude_symmetric: float, amplitude_antisymmetric: float) -> np.ndarray:
+    """Absorption-like reconstruction corresponding to the mixed derivative model."""
+
+    field = np.asarray(field_mT, dtype=float)
+    delta = field - H_res_mT
+    denominator = 4.0 * delta**2 + DeltaH_mT**2
+    absorption = (amplitude_symmetric * DeltaH_mT) / (2.0 * denominator)
+    absorption += amplitude_antisymmetric * delta / denominator
+    if np.max(absorption) < abs(np.min(absorption)):
+        absorption = -absorption
+    return np.asarray(absorption, dtype=float)
+
+
 def fit_fmr_trace(raw_trace: FmrTraceDataset, processed_trace: FmrProcessedTrace, recipe: FmrRecipe) -> FmrTraceFitResult:
     field = np.asarray(processed_trace.field_mT, dtype=float)
     signal = np.asarray(processed_trace.signal, dtype=float)
@@ -346,11 +359,15 @@ def _model_result(fit, model_name: str, components: list[FmrComponentFitResult])
 
 
 def _component_result(component_label: str, field: np.ndarray, params, diagnostics: dict[str, ParameterDiagnostic], bound_hits: dict[str, bool], names: dict[str, str], feature_reference: dict[str, float | None], metadata: dict[str, object]) -> FmrComponentFitResult:
-    return FmrComponentFitResult(component_id="", component_label=component_label, H_res_mT=float(params[names["H_res_mT"]].value), DeltaH_mT=float(params[names["DeltaH_mT"]].value), amplitude_symmetric=float(params[names["amplitude_symmetric"]].value), amplitude_antisymmetric=float(params[names["amplitude_antisymmetric"]].value), field_mT=np.asarray(field, dtype=float).copy(), component_signal=np.asarray(_component(field, float(params[names["H_res_mT"]].value), float(params[names["DeltaH_mT"]].value), float(params[names["amplitude_symmetric"]].value), float(params[names["amplitude_antisymmetric"]].value)), dtype=float), parameter_diagnostics={key: diagnostics[value] for key, value in names.items()}, bound_hits={key: bool(bound_hits.get(value, False)) for key, value in names.items()}, feature_center_mT=feature_reference.get("feature_center_mT"), feature_peak_to_peak_mT=feature_reference.get("feature_peak_to_peak_mT"), metadata=dict(metadata))
+    h_res = float(params[names["H_res_mT"]].value)
+    delta_h = float(params[names["DeltaH_mT"]].value)
+    amplitude_symmetric = float(params[names["amplitude_symmetric"]].value)
+    amplitude_antisymmetric = float(params[names["amplitude_antisymmetric"]].value)
+    return FmrComponentFitResult(component_id="", component_label=component_label, H_res_mT=h_res, DeltaH_mT=delta_h, amplitude_symmetric=amplitude_symmetric, amplitude_antisymmetric=amplitude_antisymmetric, field_mT=np.asarray(field, dtype=float).copy(), component_signal=np.asarray(_component(field, h_res, delta_h, amplitude_symmetric, amplitude_antisymmetric), dtype=float), absorption_signal=np.asarray(mixed_absorption_lorentzian(field, h_res, delta_h, amplitude_symmetric, amplitude_antisymmetric), dtype=float), parameter_diagnostics={key: diagnostics[value] for key, value in names.items()}, bound_hits={key: bool(bound_hits.get(value, False)) for key, value in names.items()}, feature_center_mT=feature_reference.get("feature_center_mT"), feature_peak_to_peak_mT=feature_reference.get("feature_peak_to_peak_mT"), metadata=dict(metadata))
 
 
 def _clone_component(component: FmrComponentFitResult, trace_id: str) -> FmrComponentFitResult:
-    return FmrComponentFitResult(component_id=f"{trace_id}:{component.component_label}", component_label=component.component_label, H_res_mT=component.H_res_mT, DeltaH_mT=component.DeltaH_mT, amplitude_symmetric=component.amplitude_symmetric, amplitude_antisymmetric=component.amplitude_antisymmetric, field_mT=np.asarray(component.field_mT, dtype=float).copy(), component_signal=np.asarray(component.component_signal, dtype=float).copy(), parameter_diagnostics=dict(component.parameter_diagnostics), bound_hits=dict(component.bound_hits), feature_center_mT=component.feature_center_mT, feature_peak_to_peak_mT=component.feature_peak_to_peak_mT, metadata=dict(component.metadata))
+    return FmrComponentFitResult(component_id=f"{trace_id}:{component.component_label}", component_label=component.component_label, H_res_mT=component.H_res_mT, DeltaH_mT=component.DeltaH_mT, amplitude_symmetric=component.amplitude_symmetric, amplitude_antisymmetric=component.amplitude_antisymmetric, field_mT=np.asarray(component.field_mT, dtype=float).copy(), component_signal=np.asarray(component.component_signal, dtype=float).copy(), absorption_signal=None if component.absorption_signal is None else np.asarray(component.absorption_signal, dtype=float).copy(), parameter_diagnostics=dict(component.parameter_diagnostics), bound_hits=dict(component.bound_hits), feature_center_mT=component.feature_center_mT, feature_peak_to_peak_mT=component.feature_peak_to_peak_mT, metadata=dict(component.metadata), resonance_metrics=component.resonance_metrics)
 
 
 def _compute_fit_metrics(signal: np.ndarray, residual: np.ndarray) -> dict[str, float]:

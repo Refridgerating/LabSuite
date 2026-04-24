@@ -10,6 +10,7 @@ from typing import Any
 import matplotlib.pyplot as plt
 import numpy as np
 
+from labsuite.core.resonance_metrics import ResonanceModeMetrics
 from labsuite.core.types import (
     AnalysisResult,
     BaselineSummary,
@@ -82,6 +83,11 @@ def load_esr_analysis_result(path: Path) -> AnalysisResult:
         fit_local_disagreement_reason=payload["qc"]["fit_local_disagreement_reason"],
         recipe_name=payload["recipe"]["name"],
         recipe_config=payload["recipe"]["config"],
+        resonance_metrics_config=payload.get("resonance_metrics", {}).get("config", {}),
+        resonance_metrics=[
+            ResonanceModeMetrics.from_dict(item)
+            for item in payload.get("resonance_metrics", {}).get("modes", [])
+        ],
     )
 
 
