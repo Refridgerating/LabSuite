@@ -8,6 +8,7 @@ from typing import Literal, Sequence
 
 from labsuite.core.recipes import load_esr_recipe
 from labsuite.core.resonance_metrics import ResonanceMetricsConfig
+from labsuite.core.sample_registry import RegistryWorkflowOptions
 from labsuite.plugins.esr.batch_qc import (
     EsrBatchQcRecord,
     compute_esr_qc_metrics,
@@ -69,6 +70,7 @@ def run_esr_batch_workflow(
     fit_mode: Literal["auto", "single", "split"] | None = None,
     show_raw: bool = False,
     resonance_metrics_config: ResonanceMetricsConfig | None = None,
+    registry_options: RegistryWorkflowOptions | None = None,
 ) -> BatchRunResult:
     """Run the ESR workflow across every discovered source file."""
 
@@ -87,6 +89,7 @@ def run_esr_batch_workflow(
             "fit_mode": fit_mode,
             "show_raw": show_raw,
             "resonance_metrics_config": resonance_metrics_config,
+            "registry_options": registry_options,
         },
     )
 
@@ -104,7 +107,7 @@ def run_esr_batch_workflow(
     )
 
     all_items = sorted(
-        [*batch_result.succeeded_items, *batch_result.failed_items],
+        [*batch_result.succeeded_items, *batch_result.failed_items, *batch_result.unresolved_items],
         key=lambda item: str(item.source_path).lower(),
     )
     batch_result.summary_csv_path, batch_result.manifest_json_path = write_batch_outputs(
@@ -115,6 +118,7 @@ def run_esr_batch_workflow(
         items=all_items,
         batch_figure_paths=batch_result.batch_figure_paths,
         resonance_metrics_csv_path=batch_result.resonance_metrics_csv_path,
+        unresolved_csv_path=batch_result.unresolved_csv_path,
     )
     return batch_result
 

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -96,6 +96,50 @@ class VsmPreprocessingRecipe:
 
 
 @dataclass(slots=True)
+class FmrFieldPolarityCorrectionRecipe:
+    """Recipe controls for optional FMR field-polarity averaging."""
+
+    enabled: bool = False
+    method: str = "gonzalez_fuentes_average"
+    polarity_column: str | None = None
+    require_pair: bool = True
+    group_by: list[str] = field(
+        default_factory=lambda: [
+            "sample_id",
+            "replicate_id",
+            "frequency",
+            "geometry",
+            "mode_id",
+        ]
+    )
+    positive_labels: list[str] = field(default_factory=lambda: ["positive", "pos", "plus", "+H"])
+    negative_labels: list[str] = field(default_factory=lambda: ["negative", "neg", "minus", "-H"])
+    max_pair_frequency_tolerance_ghz: float = 0.001
+    max_pair_hres_split_mT: float | None = None
+    on_unpaired: str = "warn_and_keep_raw"
+    fit_field: str = "Hres_avg"
+    run_comparison_fits: bool = True
+    plot_diagnostics: bool = False
+
+
+@dataclass(slots=True)
+class FmrGonzalezFuentesRequirements:
+    """Measurement requirements for Gonzalez-Fuentes field-polarity averaging."""
+
+    requires_positive_and_negative_field_sweeps: bool = True
+    cannot_be_applied_to_single_polarity_data: bool = True
+
+
+@dataclass(slots=True)
+class FmrMeasurementRequirementsRecipe:
+    """FMR measurement requirements documented in the recipe."""
+
+    gonzalez_fuentes_average: FmrGonzalezFuentesRequirements = field(
+        default_factory=FmrGonzalezFuentesRequirements
+    )
+
+
+@dataclass(slots=True)
 class FmrRecipe:
     """Recipe for the first FMR field-swept analysis path."""
 
@@ -126,6 +170,12 @@ class FmrRecipe:
     critical_bound_hit_policy: str = "reject"
     kittel_min_points: int = 3
     linewidth_min_points: int = 2
+    field_polarity_correction: FmrFieldPolarityCorrectionRecipe = field(
+        default_factory=FmrFieldPolarityCorrectionRecipe
+    )
+    measurement_requirements: FmrMeasurementRequirementsRecipe = field(
+        default_factory=FmrMeasurementRequirementsRecipe
+    )
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -263,6 +313,18 @@ def load_fmr_recipe(path: Path) -> FmrRecipe:
     """Load the FMR analysis recipe from YAML or a simple fallback mapping."""
 
     payload = _load_mapping(path)
+    fmr_payload = payload.get("fmr") if isinstance(payload.get("fmr"), dict) else {}
+    kittel_payload = fmr_payload.get("kittel") if isinstance(fmr_payload.get("kittel"), dict) else {}
+    field_polarity_payload = _mapping_value(
+        payload.get("field_polarity_correction"),
+        kittel_payload.get("field_polarity_correction"),
+        {},
+    )
+    measurement_requirements_payload = _mapping_value(
+        payload.get("measurement_requirements"),
+        fmr_payload.get("measurement_requirements"),
+        {},
+    )
     recipe = FmrRecipe(
         name=str(payload.get("name", "fmr-default")),
         signal_channel=str(payload.get("signal_channel", "fit_source")),
@@ -295,9 +357,78 @@ def load_fmr_recipe(path: Path) -> FmrRecipe:
         critical_bound_hit_policy=str(payload.get("critical_bound_hit_policy", "reject")),
         kittel_min_points=int(payload.get("kittel_min_points", 3)),
         linewidth_min_points=int(payload.get("linewidth_min_points", 2)),
+        field_polarity_correction=_load_fmr_field_polarity_recipe(field_polarity_payload),
+        measurement_requirements=_load_fmr_measurement_requirements(
+            measurement_requirements_payload
+        ),
     )
     _validate_fmr_recipe(recipe)
     return recipe
+
+
+def _load_fmr_field_polarity_recipe(payload: Any) -> FmrFieldPolarityCorrectionRecipe:
+    data = payload if isinstance(payload, dict) else {}
+    max_split = data.get("max_pair_hres_split_mT")
+    return FmrFieldPolarityCorrectionRecipe(
+        enabled=bool(data.get("enabled", False)),
+        method=str(data.get("method", "gonzalez_fuentes_average")),
+        polarity_column=_optional_recipe_str(data.get("polarity_column")),
+        require_pair=bool(data.get("require_pair", True)),
+        group_by=_string_list(
+            data.get(
+                "group_by",
+                ["sample_id", "replicate_id", "frequency", "geometry", "mode_id"],
+            )
+        ),
+        positive_labels=_string_list(data.get("positive_labels", ["positive", "pos", "plus", "+H"])),
+        negative_labels=_string_list(data.get("negative_labels", ["negative", "neg", "minus", "-H"])),
+        max_pair_frequency_tolerance_ghz=float(data.get("max_pair_frequency_tolerance_ghz", 0.001)),
+        max_pair_hres_split_mT=None if max_split in {None, ""} else float(max_split),
+        on_unpaired=str(data.get("on_unpaired", "warn_and_keep_raw")),
+        fit_field=str(data.get("fit_field", "Hres_avg")),
+        run_comparison_fits=bool(data.get("run_comparison_fits", True)),
+        plot_diagnostics=bool(data.get("plot_diagnostics", False)),
+    )
+
+
+def _load_fmr_measurement_requirements(payload: Any) -> FmrMeasurementRequirementsRecipe:
+    data = payload if isinstance(payload, dict) else {}
+    gf_payload = data.get("gonzalez_fuentes_average")
+    gf_data = gf_payload if isinstance(gf_payload, dict) else {}
+    return FmrMeasurementRequirementsRecipe(
+        gonzalez_fuentes_average=FmrGonzalezFuentesRequirements(
+            requires_positive_and_negative_field_sweeps=bool(
+                gf_data.get("requires_positive_and_negative_field_sweeps", True)
+            ),
+            cannot_be_applied_to_single_polarity_data=bool(
+                gf_data.get("cannot_be_applied_to_single_polarity_data", True)
+            ),
+        )
+    )
+
+
+def _mapping_value(*values: Any) -> Any:
+    for value in values:
+        if isinstance(value, dict):
+            return value
+    return {}
+
+
+def _string_list(value: Any) -> list[str]:
+    if value is None:
+        return []
+    if isinstance(value, str):
+        return [part.strip() for part in value.split(",") if part.strip()]
+    if isinstance(value, list):
+        return [str(part).strip() for part in value if str(part).strip()]
+    return [str(value).strip()]
+
+
+def _optional_recipe_str(value: Any) -> str | None:
+    if value is None:
+        return None
+    text = str(value).strip()
+    return text or None
 
 
 def _load_mapping(path: Path) -> dict[str, Any]:
@@ -539,3 +670,24 @@ def _validate_fmr_recipe(recipe: FmrRecipe) -> None:
         raise RecipeError("kittel_min_points must be at least 3")
     if recipe.linewidth_min_points < 2:
         raise RecipeError("linewidth_min_points must be at least 2")
+    correction = recipe.field_polarity_correction
+    if correction.method != "gonzalez_fuentes_average":
+        raise RecipeError("field_polarity_correction.method must be 'gonzalez_fuentes_average'")
+    if correction.on_unpaired not in {"warn_and_keep_raw", "drop", "fail"}:
+        raise RecipeError(
+            "field_polarity_correction.on_unpaired must be one of: warn_and_keep_raw, drop, fail"
+        )
+    if correction.fit_field not in {"Hres", "Hres_avg", "Hres_pos", "Hres_neg"}:
+        raise RecipeError(
+            "field_polarity_correction.fit_field must be one of: Hres, Hres_avg, Hres_pos, Hres_neg"
+        )
+    if correction.max_pair_frequency_tolerance_ghz < 0.0:
+        raise RecipeError(
+            "field_polarity_correction.max_pair_frequency_tolerance_ghz must be zero or positive"
+        )
+    if correction.max_pair_hres_split_mT is not None and correction.max_pair_hres_split_mT < 0.0:
+        raise RecipeError("field_polarity_correction.max_pair_hres_split_mT must be zero or positive")
+    if not correction.positive_labels:
+        raise RecipeError("field_polarity_correction.positive_labels must not be empty")
+    if not correction.negative_labels:
+        raise RecipeError("field_polarity_correction.negative_labels must not be empty")

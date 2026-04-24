@@ -19,6 +19,7 @@ from labsuite.core.measurement_models import (
     SampleRecord,
 )
 from labsuite.core.recipes import load_vsm_recipe
+from labsuite.core.sample_registry import AnalysisSampleContext
 from labsuite.plugins.vsm.derived import build_vsm_output_layers, summarize_loop_quality
 from labsuite.plugins.vsm.models import CenteringResult
 from labsuite.plugins.vsm.parser import parse_vsm_file
@@ -145,12 +146,38 @@ _SUMMARY_FIELDS = [
 ]
 
 
-def analyze_vsm_file(source_path: Path, recipe_path: Path) -> MeasurementAnalysisResult:
+def analyze_vsm_file(
+    source_path: Path,
+    recipe_path: Path,
+    sample_context: AnalysisSampleContext | None = None,
+) -> MeasurementAnalysisResult:
     """Run the first VSM loop-analysis pipeline."""
 
     dataset = parse_vsm_file(source_path.resolve())
     recipe = load_vsm_recipe(recipe_path)
     sample_record, filename_warnings = _parse_vsm_filename_metadata(dataset.source_path)
+    filename_sample_id = sample_record.sample_id
+    if sample_context is not None and sample_context.sample_id:
+        resolved_replicate = (
+            sample_context.sample.replicate
+            if sample_context.sample is not None and sample_context.sample.replicate is not None
+            else sample_record.filename_tokens.get("replicate_id")
+        )
+        sample_record = SampleRecord(
+            sample_id=sample_context.sample_id,
+            series_id=sample_context.sample_id,
+            filename_tokens={
+                **sample_record.filename_tokens,
+                "filename_sample_id": filename_sample_id,
+                "replicate_id": resolved_replicate,
+            },
+            grouping_keys={
+                "series": sample_context.sample_id,
+                "series_replicate": f"{sample_context.sample_id}:{sample_context.sample.replicate}"
+                if sample_context.sample is not None and sample_context.sample.replicate
+                else sample_context.sample_id,
+            },
+        )
 
     processed_moment, preprocessing_steps, preprocessing_warnings = apply_vsm_preprocessing(dataset, recipe)
     branch_ids, branches = split_vsm_branches(dataset.field_mT)
@@ -223,6 +250,8 @@ def analyze_vsm_file(source_path: Path, recipe_path: Path) -> MeasurementAnalysi
         replicate_id=sample_record.filename_tokens.get("replicate_id"),
         condition_metadata={
             "temperature_k": final_metrics.get("temperature_k"),
+            "registry_geometry": None if sample_context is None else sample_context.geometry,
+            "registry_measurement_id": None if sample_context is None else sample_context.measurement_id,
         },
         raw_metadata=dataset.metadata,
     )
@@ -248,6 +277,9 @@ def analyze_vsm_file(source_path: Path, recipe_path: Path) -> MeasurementAnalysi
         "sample_id": sample_record.sample_id,
         "series_id": sample_record.series_id,
         "replicate_id": sample_record.filename_tokens.get("replicate_id"),
+        "filename_sample_id": filename_sample_id,
+        "registry_measurement_id": None if sample_context is None else sample_context.measurement_id,
+        "registry_geometry": None if sample_context is None else sample_context.geometry,
         "acquisition_index": sample_record.filename_tokens.get("acquisition_index"),
         "saturation_confidence": trust_diagnostics["saturation_confidence"],
         "ambiguity_flags": trust_diagnostics["ambiguity_flags"],
@@ -418,6 +450,7 @@ def analyze_vsm_file(source_path: Path, recipe_path: Path) -> MeasurementAnalysi
             "recipe_name": recipe.name,
             "recipe_config": recipe.to_dict(),
             "preprocessing_steps": preprocessing_steps,
+            "sample_registry": None if sample_context is None else sample_context.to_dict(),
             "canonical_units": {
                 "field": "mT",
                 "raw_field": "Oe",

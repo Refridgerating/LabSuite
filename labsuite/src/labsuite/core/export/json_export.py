@@ -25,6 +25,9 @@ def _analysis_result_to_dict(result: AnalysisResult) -> dict[str, Any]:
         "modality": result.dataset.modality,
         "source_file": str(result.dataset.source_path),
         "metadata": result.dataset.metadata,
+        "provenance": {
+            "sample_registry": result.dataset.metadata.get("sample_registry"),
+        },
         "recipe": {
             "name": result.recipe_name,
             "config": result.recipe_config,

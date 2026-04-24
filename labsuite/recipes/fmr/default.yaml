@@ -25,3 +25,34 @@ shape_consistency_policy: reject
 critical_bound_hit_policy: reject
 kittel_min_points: 3
 linewidth_min_points: 2
+field_polarity_correction:
+  enabled: false
+  method: gonzalez_fuentes_average
+  polarity_column: null
+  require_pair: true
+  group_by:
+    - sample_id
+    - replicate_id
+    - frequency
+    - geometry
+    - mode_id
+  positive_labels:
+    - positive
+    - pos
+    - plus
+    - "+H"
+  negative_labels:
+    - negative
+    - neg
+    - minus
+    - "-H"
+  max_pair_frequency_tolerance_ghz: 0.001
+  max_pair_hres_split_mT: null
+  on_unpaired: warn_and_keep_raw
+  fit_field: Hres_avg
+  run_comparison_fits: true
+  plot_diagnostics: false
+measurement_requirements:
+  gonzalez_fuentes_average:
+    requires_positive_and_negative_field_sweeps: true
+    cannot_be_applied_to_single_polarity_data: true

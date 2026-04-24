@@ -254,8 +254,12 @@ def write_phasefmr_log():
         secondary_resonance_delta_mT: float | None = None,
         secondary_linewidth_mT: float | None = None,
         secondary_amplitude_scale: float = 0.55,
+        field_polarities: list[str] | None = None,
+        polarity_field_offsets_mT: dict[str, float] | None = None,
     ) -> Path:
         frequencies = frequencies_GHz or [6.0, 8.0, 10.0]
+        polarities = field_polarities or [""]
+        polarity_offsets = polarity_field_offsets_mT or {}
         base_stem = sample_stem
         if angle_deg is not None and "deg" not in base_stem:
             base_stem = f"{base_stem}-{angle_deg:g}deg"
@@ -265,75 +269,93 @@ def write_phasefmr_log():
             "Frequency(GHz)\tField Saturation (Oe)\tField Start (Oe)\tField Stop (Oe)\tField Step (Oe)\tInput gain\tOutput gain\tModul. Ampl.\tFMR ADC # of Samples\tFMR ADC Rate"
         ]
         for frequency in frequencies:
-            resonance_mT = 25.0 * frequency + resonance_offset_mT
-            field_mT = np.linspace(max(5.0, resonance_mT - 80.0), resonance_mT + 80.0, 41)
-            signal = mixed_derivative_lorentzian(
-                field_mT,
-                H_res_mT=resonance_mT,
-                DeltaH_mT=linewidth_mT,
-                amplitude_symmetric=35.0,
-                amplitude_antisymmetric=8.0,
-                baseline_offset=0.02,
-                baseline_slope=0.0006,
-            )
-            if secondary_resonance_delta_mT is not None:
-                signal += mixed_derivative_lorentzian(
-                    field_mT,
-                    H_res_mT=resonance_mT + secondary_resonance_delta_mT,
-                    DeltaH_mT=linewidth_mT if secondary_linewidth_mT is None else secondary_linewidth_mT,
-                    amplitude_symmetric=35.0 * secondary_amplitude_scale,
-                    amplitude_antisymmetric=8.0 * secondary_amplitude_scale,
-                    baseline_offset=0.0,
-                    baseline_slope=0.0,
+            for polarity in polarities:
+                polarity_label = polarity.strip()
+                polarity_sign = -1.0 if polarity_label.lower() in {"negative", "neg", "minus", "-h"} else 1.0
+                resonance_mT = polarity_sign * (
+                    25.0 * frequency + resonance_offset_mT + polarity_offsets.get(polarity_label, 0.0)
                 )
-            signal += 0.01 * np.sin(np.linspace(0.0, 2.0 * np.pi, field_mT.size))
-            i_signal = 0.4 * signal
-            q_signal = 0.6 * signal
-            fit_signal = mixed_derivative_lorentzian(
-                field_mT,
-                H_res_mT=resonance_mT,
-                DeltaH_mT=linewidth_mT,
-                amplitude_symmetric=34.0,
-                amplitude_antisymmetric=7.5,
-                baseline_offset=0.015,
-                baseline_slope=0.0004,
-            )
-            if secondary_resonance_delta_mT is not None:
-                fit_signal += mixed_derivative_lorentzian(
+                lower = resonance_mT - 80.0
+                upper = resonance_mT + 80.0
+                if polarity_sign > 0:
+                    lower = max(5.0, lower)
+                else:
+                    upper = min(-5.0, upper)
+                field_mT = np.linspace(lower, upper, 41)
+                signal = mixed_derivative_lorentzian(
                     field_mT,
-                    H_res_mT=resonance_mT + secondary_resonance_delta_mT,
-                    DeltaH_mT=linewidth_mT if secondary_linewidth_mT is None else secondary_linewidth_mT,
-                    amplitude_symmetric=34.0 * secondary_amplitude_scale,
-                    amplitude_antisymmetric=7.5 * secondary_amplitude_scale,
-                    baseline_offset=0.0,
-                    baseline_slope=0.0,
+                    H_res_mT=resonance_mT,
+                    DeltaH_mT=linewidth_mT,
+                    amplitude_symmetric=35.0,
+                    amplitude_antisymmetric=8.0,
+                    baseline_offset=0.02,
+                    baseline_slope=0.0006,
                 )
-            aux_signal = np.linspace(0.2, -0.2, field_mT.size)
-            time_signal = np.arange(field_mT.size, dtype=float) * 1.5
+                if secondary_resonance_delta_mT is not None:
+                    signal += mixed_derivative_lorentzian(
+                        field_mT,
+                        H_res_mT=resonance_mT + polarity_sign * secondary_resonance_delta_mT,
+                        DeltaH_mT=linewidth_mT if secondary_linewidth_mT is None else secondary_linewidth_mT,
+                        amplitude_symmetric=35.0 * secondary_amplitude_scale,
+                        amplitude_antisymmetric=8.0 * secondary_amplitude_scale,
+                        baseline_offset=0.0,
+                        baseline_slope=0.0,
+                    )
+                signal += 0.01 * np.sin(np.linspace(0.0, 2.0 * np.pi, field_mT.size))
+                i_signal = 0.4 * signal
+                q_signal = 0.6 * signal
+                fit_signal = mixed_derivative_lorentzian(
+                    field_mT,
+                    H_res_mT=resonance_mT,
+                    DeltaH_mT=linewidth_mT,
+                    amplitude_symmetric=34.0,
+                    amplitude_antisymmetric=7.5,
+                    baseline_offset=0.015,
+                    baseline_slope=0.0004,
+                )
+                if secondary_resonance_delta_mT is not None:
+                    fit_signal += mixed_derivative_lorentzian(
+                        field_mT,
+                        H_res_mT=resonance_mT + polarity_sign * secondary_resonance_delta_mT,
+                        DeltaH_mT=linewidth_mT if secondary_linewidth_mT is None else secondary_linewidth_mT,
+                        amplitude_symmetric=34.0 * secondary_amplitude_scale,
+                        amplitude_antisymmetric=7.5 * secondary_amplitude_scale,
+                        baseline_offset=0.0,
+                        baseline_slope=0.0,
+                    )
+                aux_signal = np.linspace(0.2, -0.2, field_mT.size)
+                time_signal = np.arange(field_mT.size, dtype=float) * 1.5
 
-            field_oe = field_mT * 10.0
-            field_start_oe = float(field_oe[0])
-            field_stop_oe = float(field_oe[-1])
-            field_step_oe = float(np.median(np.diff(field_oe)))
-            sweep_lines.append(
-                f"{frequency}\t0\t{field_start_oe:.6f}\t{field_stop_oe:.6f}\t{field_step_oe:.6f}\tx100\tx100\t0.3\t100\t1000"
-            )
-            for index in range(field_mT.size):
-                common = [
-                    f"{frequency:.6f}",
-                    f"{field_oe[index]:.6f}",
-                    f"{i_signal[index]:.6f}",
-                    f"{q_signal[index]:.6f}",
-                    f"{signal[index]:.6f}",
-                    f"{fit_signal[index]:.6f}",
-                    f"{aux_signal[index]:.6f}",
-                ]
-                if include_temp:
-                    common.append(f"{temperature_K:.6f}")
-                common.append(f"{time_signal[index]:.6f}")
-                data_lines.append("\t".join(common))
+                field_oe = field_mT * 10.0
+                field_start_oe = float(field_oe[0])
+                field_stop_oe = float(field_oe[-1])
+                field_step_oe = float(np.median(np.diff(field_oe)))
+                sweep_lines.append(
+                    f"{frequency}\t0\t{field_start_oe:.6f}\t{field_stop_oe:.6f}\t{field_step_oe:.6f}\tx100\tx100\t0.3\t100\t1000"
+                )
+                for index in range(field_mT.size):
+                    common = [f"{frequency:.6f}"]
+                    if field_polarities is not None:
+                        common.append(polarity_label)
+                    common.extend(
+                        [
+                            f"{field_oe[index]:.6f}",
+                            f"{i_signal[index]:.6f}",
+                            f"{q_signal[index]:.6f}",
+                            f"{signal[index]:.6f}",
+                            f"{fit_signal[index]:.6f}",
+                            f"{aux_signal[index]:.6f}",
+                        ]
+                    )
+                    if include_temp:
+                        common.append(f"{temperature_K:.6f}")
+                    common.append(f"{time_signal[index]:.6f}")
+                    data_lines.append("\t".join(common))
 
-        data_header = "Frequency\tField\tI\tQ\tFit source\tFit\tAux"
+        data_header = "Frequency"
+        if field_polarities is not None:
+            data_header += "\tPolarity"
+        data_header += "\tField\tI\tQ\tFit source\tFit\tAux"
         if include_temp:
             data_header += "\tTemp"
         data_header += "\tTime"

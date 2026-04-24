@@ -13,7 +13,13 @@ from labsuite.core.exceptions import ParseError
 from labsuite.plugins.fmr.models import FmrFileDataset, FmrTraceDataset
 
 
-def parse_fmr_file(path: Path) -> FmrFileDataset:
+def parse_fmr_file(
+    path: Path,
+    *,
+    polarity_column: str | None = None,
+    positive_labels: list[str] | None = None,
+    negative_labels: list[str] | None = None,
+) -> FmrFileDataset:
     """Parse a PhaseFMR log file into standardized per-frequency FMR traces."""
 
     if not path.exists():
@@ -40,12 +46,21 @@ def parse_fmr_file(path: Path) -> FmrFileDataset:
     sweep_rows_by_frequency = {
         _frequency_key(_parse_float(row.get("Frequency(GHz)"), path, "Frequency(GHz)")): row for row in sweep_rows
     }
-    grouped_rows = _group_rows_by_frequency(data_rows, data_header, path)
-    ordered_frequencies = [frequency for frequency, _rows in grouped_rows]
+    grouped_rows = _group_rows_by_frequency_and_polarity(
+        data_rows,
+        data_header,
+        path,
+        polarity_column=polarity_column,
+        positive_labels=positive_labels or ["positive", "pos", "plus", "+H"],
+        negative_labels=negative_labels or ["negative", "neg", "minus", "-H"],
+    )
+    ordered_frequencies = [frequency for frequency, _polarity, _raw_polarity, _rows in grouped_rows]
 
     traces: list[FmrTraceDataset] = []
     warnings = list(filename_warnings)
-    for index, (frequency_GHz, rows) in enumerate(grouped_rows, start=1):
+    if polarity_column is not None and polarity_column not in data_header:
+        warnings.append(f"field_polarity_column_missing:{polarity_column}")
+    for index, (frequency_GHz, field_polarity, raw_polarity_label, rows) in enumerate(grouped_rows, start=1):
         settings_row = sweep_rows_by_frequency.get(_frequency_key(frequency_GHz))
         if settings_row is None:
             warnings.append(f"missing_sweep_settings_for_frequency:{frequency_GHz:.6g}GHz")
@@ -60,6 +75,9 @@ def parse_fmr_file(path: Path) -> FmrFileDataset:
             sample_name=file_metadata["sample_name"],
             angle_deg=file_metadata["angle_deg"],
             nominal_temperature_K=nominal_temperature_K,
+            field_polarity=field_polarity,
+            raw_polarity_label=raw_polarity_label,
+            polarity_column=polarity_column,
         )
         traces.append(trace)
 
@@ -88,6 +106,10 @@ def parse_fmr_file(path: Path) -> FmrFileDataset:
             "trace_count": len(grouped_rows),
             "has_multiple_frequencies": len(grouped_rows) > 1,
             "frequency_GHz_values": ordered_frequencies,
+            "polarity_column": polarity_column,
+            "field_polarity_values": sorted(
+                {polarity for _frequency, polarity, _raw, _rows in grouped_rows if polarity is not None}
+            ),
         },
         warnings=warnings,
     )
@@ -203,20 +225,38 @@ def _extract_nominal_temperature(data_rows: list[dict[str, str]], data_header: l
     return float(round(float(np.median(np.asarray(temperatures, dtype=float)))))
 
 
-def _group_rows_by_frequency(
+def _group_rows_by_frequency_and_polarity(
     data_rows: list[dict[str, str]],
     data_header: list[str],
     path: Path,
-) -> list[tuple[float, list[dict[str, str]]]]:
-    grouped: dict[float, list[dict[str, str]]] = {}
-    order: list[float] = []
+    *,
+    polarity_column: str | None,
+    positive_labels: list[str],
+    negative_labels: list[str],
+) -> list[tuple[float, str | None, str | None, list[dict[str, str]]]]:
+    grouped: dict[tuple[float, str | None, str | None], list[dict[str, str]]] = {}
+    order: list[tuple[float, str | None, str | None]] = []
+    use_polarity = polarity_column is not None and polarity_column in data_header
     for row in data_rows:
         frequency = _parse_float(row.get("Frequency"), path, "Frequency")
-        if frequency not in grouped:
-            grouped[frequency] = []
-            order.append(frequency)
-        grouped[frequency].append(row)
-    return [(frequency, grouped[frequency]) for frequency in order]
+        field_polarity: str | None = None
+        raw_polarity: str | None = None
+        if use_polarity:
+            raw_polarity = (row.get(polarity_column) or "").strip() or None
+            field_polarity = _normalize_field_polarity(
+                raw_polarity,
+                positive_labels=positive_labels,
+                negative_labels=negative_labels,
+            )
+        key = (frequency, field_polarity, raw_polarity)
+        if key not in grouped:
+            grouped[key] = []
+            order.append(key)
+        grouped[key].append(row)
+    return [
+        (frequency, polarity, raw_polarity, grouped[(frequency, polarity, raw_polarity)])
+        for frequency, polarity, raw_polarity in order
+    ]
 
 
 def _build_trace_dataset(
@@ -231,6 +271,9 @@ def _build_trace_dataset(
     sample_name: str,
     angle_deg: float | None,
     nominal_temperature_K: float | None,
+    field_polarity: str | None,
+    raw_polarity_label: str | None,
+    polarity_column: str | None,
 ) -> FmrTraceDataset:
     field_oe = np.asarray([_parse_float(row.get("Field"), path, "Field") for row in rows], dtype=float)
     field_mT = field_oe / 10.0
@@ -269,7 +312,8 @@ def _build_trace_dataset(
         elif field_mT[-1] < field_mT[0]:
             sweep_direction = "descending"
 
-    trace_id = f"trace_{index:03d}_{frequency_GHz:.6f}GHz"
+    polarity_suffix = "" if field_polarity is None else f"_{field_polarity}"
+    trace_id = f"trace_{index:03d}_{frequency_GHz:.6f}GHz{polarity_suffix}"
     return FmrTraceDataset(
         trace_id=trace_id,
         source_file=path,
@@ -294,6 +338,9 @@ def _build_trace_dataset(
             "sweep_settings": sweep_settings,
             "data_header": data_header,
             "point_count": int(field_mT.size),
+            "field_polarity": field_polarity,
+            "field_polarity_raw": raw_polarity_label,
+            "field_polarity_column": polarity_column,
         },
         i_signal=i_signal,
         q_signal=q_signal,
@@ -333,3 +380,21 @@ def _parse_float(value: str | None, path: Path, label: str) -> float:
 
 def _frequency_key(value: float) -> str:
     return f"{value:.6f}"
+
+
+def _normalize_field_polarity(
+    value: str | None,
+    *,
+    positive_labels: list[str],
+    negative_labels: list[str],
+) -> str | None:
+    if value is None:
+        return None
+    normalized = value.strip().lower()
+    positive = {label.strip().lower() for label in positive_labels}
+    negative = {label.strip().lower() for label in negative_labels}
+    if normalized in positive:
+        return "positive"
+    if normalized in negative:
+        return "negative"
+    return "unknown"

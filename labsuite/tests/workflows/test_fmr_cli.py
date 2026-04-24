@@ -184,3 +184,55 @@ def test_fmr_batch_can_export_resonance_metrics_csv(tmp_path, project_root, writ
     assert rows
     assert "hres" in rows[0]
     assert "resonance_metrics_success" in rows[0]
+
+
+def test_fmr_cli_field_polarity_flags_export_pair_diagnostics(
+    tmp_path,
+    project_root,
+    write_phasefmr_log,
+) -> None:
+    source_file = write_phasefmr_log(
+        tmp_path / "Temp2-Co-A-2,5to17GHz-R1.log",
+        frequencies_GHz=[6.0, 8.0, 10.0, 12.0],
+        field_polarities=["positive", "negative"],
+        polarity_field_offsets_mT={"positive": 2.0, "negative": -2.0},
+    )
+    output_dir = tmp_path / "fmr_polarity_single"
+    recipe_path = project_root / "recipes" / "fmr" / "default.yaml"
+
+    exit_code = main(
+        [
+            "fmr",
+            "single",
+            "--input",
+            str(source_file),
+            "--recipe",
+            str(recipe_path),
+            "--output-dir",
+            str(output_dir),
+            "--registry",
+            str(tmp_path / "missing_registry.yaml"),
+            "--field-polarity-correction",
+            "gonzalez-fuentes",
+            "--polarity-column",
+            "Polarity",
+            "--compare-polarity-fits",
+        ]
+    )
+
+    assert exit_code == 0
+    json_path = output_dir / f"{source_file.stem}_analysis.json"
+    summary_path = output_dir / f"{source_file.stem}_summary.csv"
+    series_path = output_dir / f"{source_file.stem}_series.csv"
+    payload = json.loads(json_path.read_text(encoding="utf-8"))
+    assert payload["summary_metrics"]["field_polarity_pair_count"] == 4
+    assert payload["summary_metrics"]["field_polarity_correction_statuses"] == ["applied"]
+
+    summary_rows = list(csv.DictReader(summary_path.open("r", encoding="utf-8", newline="")))
+    assert "field_polarity" in summary_rows[0]
+    assert "Hres_avg_mT" in summary_rows[0]
+    series_rows = list(csv.DictReader(series_path.open("r", encoding="utf-8", newline="")))
+    paired_rows = [row for row in series_rows if row["row_type"] == "series_point"]
+    assert paired_rows
+    assert all(row["polarity_pair_status"] == "paired" for row in paired_rows)
+    assert all(row["fit_field"] == "Hres_avg" for row in paired_rows)

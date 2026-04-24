@@ -20,13 +20,20 @@ from labsuite.core.measurement_models import (
     SampleRecord,
     to_serializable,
 )
-from labsuite.core.recipes import FmrRecipe, load_fmr_recipe
+from labsuite.core.recipes import (
+    FmrFieldPolarityCorrectionRecipe,
+    FmrGonzalezFuentesRequirements,
+    FmrMeasurementRequirementsRecipe,
+    FmrRecipe,
+    load_fmr_recipe,
+)
 from labsuite.core.resonance_metrics import (
     ResonanceMetricsConfig,
     ResonanceModeMetrics,
     compute_absorption_mode_metrics,
     flatten_resonance_metrics,
 )
+from labsuite.core.sample_registry import AnalysisSampleContext
 from labsuite.plugins.fmr.derived import build_fmr_series, fit_fmr_physics
 from labsuite.plugins.fmr.fitters import assess_trace_fit_quality, fit_fmr_trace
 from labsuite.plugins.fmr.models import (
@@ -47,12 +54,28 @@ def analyze_fmr_file(
     source_path: Path,
     recipe_path: Path,
     resonance_metrics_config: ResonanceMetricsConfig | None = None,
+    sample_context: AnalysisSampleContext | None = None,
+    recipe_overrides: dict[str, Any] | None = None,
 ) -> MeasurementAnalysisResult:
     """Run the PhaseFMR-first single-file analysis pipeline."""
 
-    file_dataset = parse_fmr_file(source_path.resolve())
     recipe = load_fmr_recipe(recipe_path.resolve())
+    _apply_fmr_recipe_overrides(recipe, recipe_overrides or {})
+    file_dataset = parse_fmr_file(
+        source_path.resolve(),
+        polarity_column=recipe.field_polarity_correction.polarity_column,
+        positive_labels=recipe.field_polarity_correction.positive_labels,
+        negative_labels=recipe.field_polarity_correction.negative_labels,
+    )
     metrics_config = resonance_metrics_config or ResonanceMetricsConfig()
+    resolved_sample_id = sample_context.sample_id if sample_context is not None and sample_context.sample_id else file_dataset.sample_name
+    resolved_replicate_id = (
+        sample_context.sample.replicate
+        if sample_context is not None and sample_context.sample is not None and sample_context.sample.replicate is not None
+        else file_dataset.replicate_id
+    )
+    g_mode = "float" if sample_context is None else sample_context.g_mode
+    g_value = None if sample_context is None else sample_context.g_value
 
     trace_fits: list[FmrTraceFitResult] = []
     processed_traces: list[dict[str, Any]] = []
@@ -62,6 +85,7 @@ def analyze_fmr_file(
         selected_trace = _select_signal_channel(trace, recipe.signal_channel)
         processed_trace = apply_fmr_preprocessing(selected_trace, recipe)
         fit_result = fit_fmr_trace(selected_trace, processed_trace, recipe)
+        fit_result.sample_name = resolved_sample_id
         accepted, rejection_reason, fit_warnings = assess_trace_fit_quality(fit_result, recipe=recipe)
         fit_result.accepted = accepted
         fit_result.rejection_reason = rejection_reason
@@ -84,24 +108,31 @@ def analyze_fmr_file(
         if rejection_reason is not None:
             warnings.append(f"{selected_trace.trace_id}:{rejection_reason}")
 
-    series_collection = build_fmr_series(trace_fits, measurement_mode=file_dataset.measurement_mode)
-    physics_collection = fit_fmr_physics(series_collection, recipe)
+    series_collection = build_fmr_series(
+        trace_fits,
+        measurement_mode=file_dataset.measurement_mode,
+        recipe=recipe,
+        replicate_id=resolved_replicate_id,
+        geometry=None if sample_context is None else sample_context.geometry,
+    )
+    physics_collection = fit_fmr_physics(series_collection, recipe, g_mode=g_mode, g_value=g_value)
     warnings.extend(series_collection.warnings)
     warnings.extend(physics_collection.warnings)
     legacy_series, legacy_physics = _legacy_series_pair(series_collection, physics_collection)
 
     sample = SampleRecord(
-        sample_id=file_dataset.sample_name,
-        series_id=file_dataset.sample_name,
+        sample_id=resolved_sample_id,
+        series_id=resolved_sample_id,
         filename_tokens={
             "replicate_id": file_dataset.replicate_id,
             "angle_deg": file_dataset.angle_deg,
             "sweep_span_label": file_dataset.sweep_span_label,
+            "filename_sample_id": file_dataset.sample_name,
         },
         grouping_keys={
-            "sample": file_dataset.sample_name,
+            "sample": resolved_sample_id,
             "sample_angle_temperature": _group_key(
-                file_dataset.sample_name,
+                resolved_sample_id,
                 file_dataset.angle_deg,
                 file_dataset.nominal_temperature_K,
                 file_dataset.measurement_mode,
@@ -112,19 +143,26 @@ def analyze_fmr_file(
         modality="fmr",
         source_path=file_dataset.source_path,
         sample=sample,
-        replicate_id=file_dataset.replicate_id,
+        replicate_id=resolved_replicate_id,
         condition_metadata={
             "angle_deg": file_dataset.angle_deg,
             "temperature_K": file_dataset.nominal_temperature_K,
             "measurement_mode": file_dataset.measurement_mode,
+            "registry_geometry": None if sample_context is None else sample_context.geometry,
+            "registry_measurement_id": None if sample_context is None else sample_context.measurement_id,
         },
         raw_metadata=file_dataset.metadata,
     )
 
     summary_metrics = {
-        "sample_id": file_dataset.sample_name,
-        "series_id": file_dataset.sample_name,
-        "replicate_id": file_dataset.replicate_id,
+        "sample_id": resolved_sample_id,
+        "series_id": resolved_sample_id,
+        "replicate_id": resolved_replicate_id,
+        "filename_sample_id": file_dataset.sample_name,
+        "registry_measurement_id": None if sample_context is None else sample_context.measurement_id,
+        "registry_geometry": None if sample_context is None else sample_context.geometry,
+        "g_mode": g_mode,
+        "g_value": g_value,
         "angle_deg": file_dataset.angle_deg,
         "temperature_K": file_dataset.nominal_temperature_K,
         "measurement_mode": file_dataset.measurement_mode,
@@ -136,6 +174,10 @@ def analyze_fmr_file(
         "excluded_trace_count": int(series_collection.metadata.get("excluded_trace_count", 0)),
         "mode_counts": dict(series_collection.metadata.get("mode_counts", {})),
         "series_labels": sorted(series_collection.series_by_label),
+        "field_polarity_correction": series_collection.metadata.get("field_polarity_correction", {}),
+        "field_polarity_correction_enabled": recipe.field_polarity_correction.enabled,
+        "field_polarity_correction_statuses": series_collection.metadata.get("field_polarity_correction", {}).get("statuses", []),
+        "field_polarity_pair_count": series_collection.metadata.get("field_polarity_correction", {}).get("paired_point_count", 0),
         "rejection_reason_histogram": _summarize_rejection_reasons(trace_fits),
         "kittel_success": any(item.kittel_fit is not None and item.kittel_fit.success for item in physics_collection.physics_by_label.values()),
         "linewidth_success": any(item.linewidth_fit is not None and item.linewidth_fit.success for item in physics_collection.physics_by_label.values()),
@@ -159,7 +201,7 @@ def analyze_fmr_file(
 
     plot_manifest = PlotManifest(
         figure_type="fmr_trace_series_diagnostic",
-        title=f"FMR Diagnostic: {file_dataset.sample_name}",
+        title=f"FMR Diagnostic: {resolved_sample_id}",
         series=[
             {"label": "Trace fits", "x": "field_mT", "y": "processed_signal"},
             {"label": "Hres vs frequency", "x": "frequency_GHz", "y": "resonance_field_mT"},
@@ -196,6 +238,9 @@ def analyze_fmr_file(
             "canonical_signal_channel": recipe.signal_channel,
             "trace_fit_model": recipe.trace_fit_model,
             "physics_model": recipe.physics_model,
+            "sample_registry": None if sample_context is None else sample_context.to_dict(),
+            "g_mode": g_mode,
+            "g_value": g_value,
             "canonical_units": {
                 "field": "mT",
                 "raw_field": "Oe",
@@ -210,6 +255,45 @@ def analyze_fmr_file(
         analysis_payload=analysis_payload,
         plot_manifest=plot_manifest,
     )
+
+
+def _apply_fmr_recipe_overrides(recipe: FmrRecipe, overrides: dict[str, Any]) -> None:
+    if not overrides:
+        return
+    correction = recipe.field_polarity_correction
+    for name, value in overrides.items():
+        if value is None:
+            continue
+        if name == "field_polarity_correction":
+            correction.enabled = str(value) == "gonzalez-fuentes"
+        elif name == "pair_field_polarities":
+            correction.enabled = bool(value)
+        elif name == "fit_field":
+            correction.fit_field = str(value)
+        elif name == "require_polarity_pair":
+            correction.require_pair = bool(value)
+        elif name == "on_unpaired_polarity":
+            correction.on_unpaired = str(value)
+        elif name == "polarity_column":
+            correction.polarity_column = str(value)
+        elif name == "positive_polarity_labels":
+            correction.positive_labels = _split_csv_option(str(value))
+        elif name == "negative_polarity_labels":
+            correction.negative_labels = _split_csv_option(str(value))
+        elif name == "pair_by":
+            correction.group_by = _split_csv_option(str(value))
+        elif name == "max_pair_frequency_tolerance_ghz":
+            correction.max_pair_frequency_tolerance_ghz = float(value)
+        elif name == "max_pair_hres_split_mT":
+            correction.max_pair_hres_split_mT = None if value in {None, ""} else float(value)
+        elif name == "compare_polarity_fits":
+            correction.run_comparison_fits = bool(value)
+        elif name == "plot_polarity_diagnostics":
+            correction.plot_diagnostics = bool(value)
+
+
+def _split_csv_option(value: str) -> list[str]:
+    return [part.strip() for part in value.split(",") if part.strip()]
 
 
 def _select_signal_channel(trace, channel_name: str):
@@ -416,6 +500,17 @@ def export_fmr_summary_csv(result: MeasurementAnalysisResult | dict[str, Any], d
         "component_id",
         "component_accepted",
         "component_rejection_reason",
+        "field_polarity",
+        "field_polarity_raw",
+        "polarity_pair_status",
+        "Hres_raw_mT",
+        "Hres_raw_abs_mT",
+        "Hres_pos_mT",
+        "Hres_neg_mT",
+        "Hres_avg_mT",
+        "Hres_offset_mT",
+        "Hres_split_mT",
+        "fit_field",
         "model_name",
         "H_res_mT",
         "H_res_mT_stderr",
@@ -476,6 +571,11 @@ def export_fmr_summary_csv(result: MeasurementAnalysisResult | dict[str, Any], d
         for series in collection.get("series_by_label", {}).values()
         for component_id in series.get("included_component_ids", [])
     }
+    polarity_point_by_component_id = {
+        point.get("component_id"): point
+        for series in collection.get("series_by_label", {}).values()
+        for point in series.get("metadata", {}).get("polarity_points", [])
+    }
     with destination.open("w", encoding="utf-8", newline="") as handle:
         writer = csv.DictWriter(handle, fieldnames=fieldnames)
         writer.writeheader()
@@ -509,6 +609,21 @@ def export_fmr_summary_csv(result: MeasurementAnalysisResult | dict[str, Any], d
                         "component_id": component.get("component_id"),
                         "component_accepted": component.get("accepted"),
                         "component_rejection_reason": component.get("rejection_reason"),
+                        "field_polarity": component.get("metadata", {}).get("field_polarity"),
+                        "field_polarity_raw": component.get("metadata", {}).get("field_polarity_raw"),
+                        "polarity_pair_status": polarity_point_by_component_id.get(
+                            component.get("component_id"), {}
+                        ).get("polarity_pair_status"),
+                        "Hres_raw_mT": component.get("H_res_mT"),
+                        "Hres_raw_abs_mT": None
+                        if component.get("H_res_mT") is None
+                        else abs(float(component.get("H_res_mT"))),
+                        "Hres_pos_mT": polarity_point_by_component_id.get(component.get("component_id"), {}).get("Hres_pos_mT"),
+                        "Hres_neg_mT": polarity_point_by_component_id.get(component.get("component_id"), {}).get("Hres_neg_mT"),
+                        "Hres_avg_mT": polarity_point_by_component_id.get(component.get("component_id"), {}).get("Hres_avg_mT"),
+                        "Hres_offset_mT": polarity_point_by_component_id.get(component.get("component_id"), {}).get("Hres_offset_mT"),
+                        "Hres_split_mT": polarity_point_by_component_id.get(component.get("component_id"), {}).get("Hres_split_mT"),
+                        "fit_field": polarity_point_by_component_id.get(component.get("component_id"), {}).get("fit_field"),
                         "model_name": fit["model_name"],
                         "H_res_mT": component.get("H_res_mT"),
                         "H_res_mT_stderr": _diagnostic_stderr(component_diagnostics, "H_res_mT"),
@@ -559,6 +674,18 @@ def export_fmr_series_csv(result: MeasurementAnalysisResult | dict[str, Any], de
         "linewidth_mT",
         "trace_id",
         "component_id",
+        "field_polarity",
+        "field_polarity_raw",
+        "polarity_pair_id",
+        "polarity_pair_status",
+        "Hres_raw_mT",
+        "Hres_raw_abs_mT",
+        "Hres_pos_mT",
+        "Hres_neg_mT",
+        "Hres_avg_mT",
+        "Hres_offset_mT",
+        "Hres_split_mT",
+        "fit_field",
         "label",
         "value",
         "extra",
@@ -567,6 +694,10 @@ def export_fmr_series_csv(result: MeasurementAnalysisResult | dict[str, Any], de
         writer = csv.DictWriter(handle, fieldnames=fieldnames)
         writer.writeheader()
         for series_label, series in collection.get("series_by_label", {}).items():
+            polarity_points = series.get("metadata", {}).get("polarity_points", [])
+            polarity_by_component_id = {
+                point.get("component_id"): point for point in polarity_points
+            }
             for frequency, resonance, linewidth, trace_id, component_id in zip(
                 series["frequency_GHz"],
                 series["resonance_field_mT"],
@@ -575,6 +706,7 @@ def export_fmr_series_csv(result: MeasurementAnalysisResult | dict[str, Any], de
                 series.get("included_component_ids", []),
                 strict=True,
             ):
+                polarity_point = polarity_by_component_id.get(component_id, {})
                 writer.writerow(
                     {
                         "series_label": series_label,
@@ -585,6 +717,18 @@ def export_fmr_series_csv(result: MeasurementAnalysisResult | dict[str, Any], de
                         "linewidth_mT": linewidth,
                         "trace_id": trace_id,
                         "component_id": component_id,
+                        "field_polarity": polarity_point.get("field_polarity"),
+                        "field_polarity_raw": polarity_point.get("field_polarity_raw"),
+                        "polarity_pair_id": polarity_point.get("polarity_pair_id"),
+                        "polarity_pair_status": polarity_point.get("polarity_pair_status"),
+                        "Hres_raw_mT": polarity_point.get("Hres_raw_mT"),
+                        "Hres_raw_abs_mT": polarity_point.get("Hres_raw_abs_mT"),
+                        "Hres_pos_mT": polarity_point.get("Hres_pos_mT"),
+                        "Hres_neg_mT": polarity_point.get("Hres_neg_mT"),
+                        "Hres_avg_mT": polarity_point.get("Hres_avg_mT"),
+                        "Hres_offset_mT": polarity_point.get("Hres_offset_mT"),
+                        "Hres_split_mT": polarity_point.get("Hres_split_mT"),
+                        "fit_field": polarity_point.get("fit_field"),
                         "label": "H_res_mT",
                         "value": linewidth,
                         "extra": "DeltaH_mT",
@@ -719,6 +863,52 @@ def export_fmr_analysis_figure(result: MeasurementAnalysisResult | dict[str, Any
     return destination
 
 
+def export_fmr_polarity_diagnostics_figure(
+    result: MeasurementAnalysisResult | dict[str, Any],
+    destination: Path,
+) -> Path | None:
+    """Save an FMR polarity-pair diagnostic figure when paired-polarity data exists."""
+
+    payload = _normalize_result(result)
+    collection = payload["analysis_payload"]["series_collection_result"]
+    point_groups = {
+        label: series.get("metadata", {}).get("polarity_points", [])
+        for label, series in collection.get("series_by_label", {}).items()
+    }
+    if not any(point_groups.values()):
+        return None
+
+    figure, axes = plt.subplots(2, 1, figsize=(9.0, 7.5), constrained_layout=True, sharex=True)
+    colors = {"single_unassigned": "#1d4ed8", "mode_1": "#047857", "mode_2": "#b91c1c"}
+    for label, points in point_groups.items():
+        if not points:
+            continue
+        color = colors.get(label, "#4b5563")
+        raw_frequency = [float(point["frequency_GHz"]) for point in points if point.get("Hres_raw_abs_mT") is not None]
+        raw_hres = [float(point["Hres_raw_abs_mT"]) for point in points if point.get("Hres_raw_abs_mT") is not None]
+        paired_frequency = [float(point["frequency_GHz"]) for point in points if point.get("Hres_avg_mT") is not None]
+        paired_hres = [float(point["Hres_avg_mT"]) for point in points if point.get("Hres_avg_mT") is not None]
+        split_frequency = [float(point["frequency_GHz"]) for point in points if point.get("Hres_split_mT") is not None]
+        split_hres = [float(point["Hres_split_mT"]) for point in points if point.get("Hres_split_mT") is not None]
+        if raw_frequency:
+            axes[0].scatter(raw_frequency, raw_hres, color=color, marker="o", s=24, alpha=0.45, label=f"{label} raw |Hres|")
+        if paired_frequency:
+            axes[0].scatter(paired_frequency, paired_hres, color=color, marker="x", s=34, label=f"{label} Hres_avg")
+        if split_frequency:
+            axes[1].scatter(split_frequency, split_hres, color=color, s=28, label=f"{label} split")
+    axes[0].set_title(f"FMR Polarity Diagnostics: {payload['summary_metrics']['sample_id']}")
+    axes[0].set_ylabel("Field (mT)")
+    axes[1].set_xlabel("Frequency (GHz)")
+    axes[1].set_ylabel("Hres split (mT)")
+    for axis in axes:
+        axis.grid(alpha=0.2)
+        if axis.get_legend_handles_labels()[0]:
+            axis.legend(loc="best")
+    figure.savefig(destination, dpi=200)
+    plt.close(figure)
+    return destination
+
+
 def export_fmr_trace_diagnostic_figures(
     result: MeasurementAnalysisResult | dict[str, Any],
     destination_dir: Path,
@@ -748,11 +938,20 @@ def export_fmr_bundle_from_json(analysis_json_path: Path, output_dir: Path | Non
     summary_path = destination_dir / f"{stem}_summary.csv"
     figure_path = destination_dir / f"{stem}_figure.png"
     series_path = destination_dir / f"{stem}_series.csv"
+    polarity_path = destination_dir / f"{stem}_polarity_diagnostics.png"
     diagnostics_dir = destination_dir / "trace_diagnostics"
     export_fmr_analysis_csv(payload, csv_path)
     export_fmr_summary_csv(payload, summary_path)
     export_fmr_series_csv(payload, series_path)
     export_fmr_analysis_figure(payload, figure_path)
+    polarity_plot = None
+    if (
+        payload.get("provenance", {})
+        .get("recipe_config", {})
+        .get("field_polarity_correction", {})
+        .get("plot_diagnostics")
+    ):
+        polarity_plot = export_fmr_polarity_diagnostics_figure(payload, polarity_path)
     export_fmr_trace_diagnostic_figures(payload, diagnostics_dir)
     return {
         "json_path": analysis_json_path.resolve(),
@@ -760,6 +959,7 @@ def export_fmr_bundle_from_json(analysis_json_path: Path, output_dir: Path | Non
         "summary_csv_path": summary_path,
         "figure_path": figure_path,
         "series_csv_path": series_path,
+        "polarity_diagnostics_path": polarity_plot,
         "trace_diagnostics_dir": diagnostics_dir,
     }
 
@@ -827,6 +1027,7 @@ def aggregate_fmr_payloads(payloads: list[dict[str, Any]]) -> list[dict[str, Any
         series_collection = build_fmr_series(
             trace_fits,
             measurement_mode=group_metadata[group_key]["measurement_mode"],
+            recipe=recipe,
         )
         physics_collection = fit_fmr_physics(series_collection, recipe)
         aggregate_results.append(
@@ -887,7 +1088,21 @@ def _format_value(value: Any) -> str:
 
 def _recipe_from_payload(payload: dict[str, Any]) -> FmrRecipe:
     config = payload["provenance"]["recipe_config"]
-    return FmrRecipe(**config)
+    field_polarity = config.get("field_polarity_correction") or {}
+    requirements = config.get("measurement_requirements") or {}
+    gf_requirements = requirements.get("gonzalez_fuentes_average") or {}
+    simple_config = {
+        key: value
+        for key, value in config.items()
+        if key not in {"field_polarity_correction", "measurement_requirements"}
+    }
+    return FmrRecipe(
+        **simple_config,
+        field_polarity_correction=FmrFieldPolarityCorrectionRecipe(**field_polarity),
+        measurement_requirements=FmrMeasurementRequirementsRecipe(
+            gonzalez_fuentes_average=FmrGonzalezFuentesRequirements(**gf_requirements)
+        ),
+    )
 
 
 def _legacy_series_pair(series_collection: FmrSeriesCollectionResult, physics_collection: FmrPhysicsCollectionResult) -> tuple[FmrSeriesResult | None, FmrPhysicsResult | None]:
@@ -1014,6 +1229,7 @@ def _build_metric_summary(payload: dict[str, Any]) -> str:
         f"components = {summary.get('accepted_component_count')}",
         f"multi_freq = {summary.get('has_multiple_frequencies')}",
         f"series = {','.join(summary.get('series_labels', []))}",
+        f"polarity = {summary.get('field_polarity_correction_statuses')}",
         f"kittel = {summary.get('kittel_success')}",
         f"linewidth = {summary.get('linewidth_success')}",
         f"gamma = {_format_value(summary.get('gamma_GHz_per_T'))} GHz/T",
@@ -1044,6 +1260,8 @@ def _build_single_report_text(payload: dict[str, Any]) -> str:
         f"- Accepted components: `{summary.get('accepted_component_count')}`",
         f"- Rejected traces: `{rejected_count}`",
         f"- Multi-frequency file: `{summary.get('has_multiple_frequencies')}`",
+        f"- Gonzalez-Fuentes correction: `{summary.get('field_polarity_correction_statuses')}`",
+        f"- Polarity pairs: `{summary.get('field_polarity_pair_count')}`",
         f"- Diagnostics folder: `{diagnostics_dir}`",
         "",
         "## Fit Modes",
@@ -1102,6 +1320,7 @@ def _build_batch_report_text(payloads: list[dict[str, Any]]) -> str:
                 f"- Angle: `{metadata.get('angle_deg')}` deg",
                 f"- Temperature: `{metadata.get('temperature_K')}` K",
                 f"- Measurement mode: `{metadata.get('measurement_mode')}`",
+                f"- Gonzalez-Fuentes correction: `{series_collection.get('metadata', {}).get('field_polarity_correction', {})}`",
                 f"- Series labels: `{','.join(sorted(series_collection.get('series_by_label', {})))}`",
                 "",
             ]

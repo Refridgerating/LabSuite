@@ -357,6 +357,9 @@ component(H) =
 - In-plane field-swept Kittel model: `f = gamma * sqrt(Hres * (Hres + Meff))`
 - Linewidth model: `DeltaH = DeltaH0 + slope * f`
 - Damping extraction: `alpha = slope * gamma_rad / (4 * pi)`
+- Optional Gonzalez-Fuentes / Dumas / Garcia polarity averaging, when paired `+H` and `-H`
+  sweeps are present for the same frequency and mode:
+  `Hres_avg = (abs(Hres_pos) + abs(Hres_neg)) / 2`
 
 Key extracted outputs:
 
@@ -367,6 +370,15 @@ Key extracted outputs:
 - accepted and rejected components with rejection reasons
 - per-series resonance-field and linewidth trends versus frequency
 - derived physics parameters: `gamma_GHz_per_T`, `g`, `M_eff_mT`, `alpha`, `DeltaH0_mT`
+- polarity-pair diagnostics when enabled: `Hres_pos_mT`, `Hres_neg_mT`,
+  `Hres_avg_mT`, `Hres_offset_mT`, and `Hres_split_mT`
+
+Gonzalez-Fuentes polarity averaging is not a universal post-processing correction. It is
+available only when the experiment includes paired positive-field and negative-field
+FMR sweeps for the same frequency and mode. Single-polarity datasets continue with raw
+`H_res_mT` Kittel fitting and the correction is marked skipped. Future FMR measurements
+should be collected in both positive and negative field directions when high-confidence
+g-factor extraction is desired.
 
 FMR QC:
 

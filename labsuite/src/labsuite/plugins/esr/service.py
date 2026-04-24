@@ -14,6 +14,7 @@ from labsuite.core.resonance_metrics import (
     ResonanceModeMetrics,
     compute_absorption_mode_metrics,
 )
+from labsuite.core.sample_registry import AnalysisSampleContext
 from labsuite.core.types import (
     AnalysisResult,
     FitAttemptRecord,
@@ -49,10 +50,21 @@ def analyze_esr_file(
     recipe_path: Path,
     fit_mode: Literal["auto", "single", "split"] | None = None,
     resonance_metrics_config: ResonanceMetricsConfig | None = None,
+    sample_context: AnalysisSampleContext | None = None,
 ) -> AnalysisResult:
     """Run the ESR parse, preprocess, and fit stages for one source file."""
 
     dataset = parse_esr_file(source_path.resolve())
+    if sample_context is not None:
+        dataset.metadata = {
+            **dataset.metadata,
+            "sample_registry": sample_context.to_dict(),
+            "sample_id": sample_context.sample_id,
+            "measurement_id": sample_context.measurement_id,
+            "registry_geometry": sample_context.geometry,
+            "g_mode": sample_context.g_mode,
+            "g_value": sample_context.g_value,
+        }
     recipe = load_esr_recipe(recipe_path)
     metrics_config = resonance_metrics_config or ResonanceMetricsConfig()
     requested_fit_mode = fit_mode or recipe.fit_mode

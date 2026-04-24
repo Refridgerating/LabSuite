@@ -11,6 +11,7 @@ from typing import Any, Callable, Sequence
 
 from labsuite.core.exceptions import LabSuiteError, WorkflowError
 from labsuite.core.resonance_metrics import ResonanceMetricsConfig, flatten_resonance_metrics
+from labsuite.core.sample_registry import RegistryResolutionError
 from labsuite.workflows.single_file import WorkflowArtifacts
 
 
@@ -42,6 +43,8 @@ class BatchRunResult:
     manifest_json_path: Path
     batch_figure_paths: dict[str, Path] = field(default_factory=dict)
     resonance_metrics_csv_path: Path | None = None
+    unresolved_items: list[BatchItemResult] = field(default_factory=list)
+    unresolved_csv_path: Path | None = None
 
 
 def discover_source_files(
@@ -148,6 +151,7 @@ def run_batch_workflow(
 
     succeeded_items: list[BatchItemResult] = []
     failed_items: list[BatchItemResult] = []
+    unresolved_items: list[BatchItemResult] = []
     successful_analyses: list[Any] = []
     item_output_dirs = _build_item_output_dirs(output_dir, discovered_sources)
     resolved_recipe = recipe_path.resolve()
@@ -162,6 +166,20 @@ def run_batch_workflow(
                 output_dir=item_output_dir,
                 **options,
             )
+        except RegistryResolutionError as exc:
+            unresolved_items.append(
+                BatchItemResult(
+                    source_path=source_path,
+                    status="unresolved",
+                    error_message=str(exc),
+                    output_dir=item_output_dir,
+                    json_path=None,
+                    csv_path=None,
+                    summary_csv_path=None,
+                    figure_path=None,
+                )
+            )
+            continue
         except LabSuiteError as exc:
             failed_items.append(
                 BatchItemResult(
@@ -194,7 +212,8 @@ def run_batch_workflow(
 
     batch_figure_paths = {} if export_batch_figure is None else export_batch_figure(successful_analyses, output_dir)
     resonance_metrics_csv_path = _maybe_export_batch_resonance_metrics(successful_analyses, output_dir, options)
-    all_items = sorted([*succeeded_items, *failed_items], key=lambda item: str(item.source_path).lower())
+    unresolved_csv_path = _maybe_write_unresolved_csv(unresolved_items, output_dir)
+    all_items = sorted([*succeeded_items, *failed_items, *unresolved_items], key=lambda item: str(item.source_path).lower())
     summary_csv_path, manifest_json_path = write_batch_outputs(
         inputs=resolved_inputs,
         pattern=pattern,
@@ -203,6 +222,7 @@ def run_batch_workflow(
         items=all_items,
         batch_figure_paths=batch_figure_paths,
         resonance_metrics_csv_path=resonance_metrics_csv_path,
+        unresolved_csv_path=unresolved_csv_path,
     )
     return BatchRunResult(
         discovered_sources=discovered_sources,
@@ -213,6 +233,8 @@ def run_batch_workflow(
         manifest_json_path=manifest_json_path,
         batch_figure_paths=batch_figure_paths,
         resonance_metrics_csv_path=resonance_metrics_csv_path,
+        unresolved_items=unresolved_items,
+        unresolved_csv_path=unresolved_csv_path,
     )
 
 
@@ -225,6 +247,7 @@ def write_batch_outputs(
     items: Sequence[BatchItemResult],
     batch_figure_paths: dict[str, Path],
     resonance_metrics_csv_path: Path | None = None,
+    unresolved_csv_path: Path | None = None,
 ) -> tuple[Path, Path]:
     """Write batch summary and manifest artifacts for a completed run."""
 
@@ -239,6 +262,7 @@ def write_batch_outputs(
         items=items,
         batch_figure_paths=batch_figure_paths,
         resonance_metrics_csv_path=resonance_metrics_csv_path,
+        unresolved_csv_path=unresolved_csv_path,
         destination=manifest_json_path,
     )
     return summary_csv_path, manifest_json_path
@@ -302,6 +326,7 @@ def _write_batch_manifest_json(
     items: Sequence[BatchItemResult],
     batch_figure_paths: dict[str, Path],
     resonance_metrics_csv_path: Path | None,
+    unresolved_csv_path: Path | None,
     destination: Path,
 ) -> None:
     serialized_batch_figures = {
@@ -321,6 +346,7 @@ def _write_batch_manifest_json(
         "batch_figures": serialized_batch_figures,
         "batch_figure_png": batch_figure_png,
         "batch_resonance_metrics_csv": None if resonance_metrics_csv_path is None else str(resonance_metrics_csv_path),
+        "unresolved_files_csv": None if unresolved_csv_path is None else str(unresolved_csv_path),
         "items": [
             {
                 "source_file": str(item.source_path),
@@ -337,8 +363,32 @@ def _write_batch_manifest_json(
         ],
         "succeeded_count": sum(1 for item in items if item.status == "success"),
         "failed_count": sum(1 for item in items if item.status == "failed"),
+        "unresolved_count": sum(1 for item in items if item.status == "unresolved"),
     }
     destination.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+
+
+def _maybe_write_unresolved_csv(items: Sequence[BatchItemResult], output_dir: Path) -> Path | None:
+    if not items:
+        return None
+    destination = output_dir / "unresolved_files.csv"
+    with destination.open("w", encoding="utf-8", newline="") as handle:
+        writer = csv.DictWriter(
+            handle,
+            fieldnames=["source_file", "source_stem", "status", "error_message", "output_dir"],
+        )
+        writer.writeheader()
+        for item in sorted(items, key=lambda entry: str(entry.source_path).lower()):
+            writer.writerow(
+                {
+                    "source_file": str(item.source_path),
+                    "source_stem": item.source_path.stem,
+                    "status": item.status,
+                    "error_message": item.error_message,
+                    "output_dir": str(item.output_dir),
+                }
+            )
+    return destination
 
 
 def _maybe_export_batch_resonance_metrics(
