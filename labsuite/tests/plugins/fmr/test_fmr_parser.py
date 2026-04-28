@@ -27,7 +27,9 @@ def test_parse_phasefmr_log_splits_multi_frequency_file(tmp_path, write_phasefmr
     assert all(trace.metadata["measurement_mode"] == "FMR IP - Dual" for trace in result.traces)
 
 
-def test_parse_phasefmr_cryo_log_preserves_temperature_metadata(tmp_path, write_phasefmr_log) -> None:
+def test_parse_phasefmr_cryo_log_preserves_temperature_metadata(
+    tmp_path, write_phasefmr_log
+) -> None:
     source_file = write_phasefmr_log(
         tmp_path / "NiFeStd1-03APR2026-R1.log",
         frequencies_GHz=[9.459],
@@ -55,7 +57,8 @@ def test_parse_fmr_file_rejects_invalid_instrument_type(tmp_path) -> None:
                 "[Instrument Settings]",
                 'Instrument type = "NotFMR"',
                 "[Sweep settings]",
-                "Frequency(GHz)\tField Saturation (Oe)\tField Start (Oe)\tField Stop (Oe)\tField Step (Oe)",
+                "Frequency(GHz)\tField Saturation (Oe)\tField Start (Oe)\t"
+                "Field Stop (Oe)\tField Step (Oe)",
                 "9.0\t0\t1000\t2000\t25",
                 "[Data]",
                 "Frequency\tField\tFit source\tFit\tAux\tTime",

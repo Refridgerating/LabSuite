@@ -6,7 +6,10 @@ import pytest
 from labsuite.core.recipes import EsrPreprocessingRecipe, load_esr_recipe
 from labsuite.core.types import PeakWindow, ProcessedTrace
 from labsuite.plugins.esr.fitters import derivative_lorentzian
-from labsuite.plugins.esr.preprocess import integrate_local_resonance, integrate_local_resonance_with_curves
+from labsuite.plugins.esr.preprocess import (
+    integrate_local_resonance,
+    integrate_local_resonance_with_curves,
+)
 
 
 def test_local_integration_is_robust_to_baseline_offset() -> None:
@@ -36,7 +39,7 @@ def test_local_integration_is_stable_across_field_span() -> None:
     assert long_span.area_integral == pytest.approx(short_span.area_integral, rel=0.05)
 
 
-def test_local_integration_falls_back_to_constant_baseline_when_off_resonance_points_are_sparse() -> None:
+def test_local_integration_uses_constant_baseline_with_sparse_off_resonance() -> None:
     field = np.linspace(108.0, 122.0, 15)
     signal = derivative_lorentzian(field, amplitude=1.2, center_mT=115.0, gamma_mT=0.5, offset=0.0)
     trace = ProcessedTrace(field_mT=field, signal=np.asarray(signal, dtype=float))
@@ -113,7 +116,10 @@ def test_default_esr_recipe_uses_wider_local_window_settings(project_root) -> No
     recipe = load_esr_recipe(project_root / "recipes" / "esr" / "default.yaml")
 
     assert recipe.integration_window_gamma_multiplier > 0.0
-    assert recipe.integration_baseline_window_gamma_multiplier > recipe.integration_window_gamma_multiplier
+    assert (
+        recipe.integration_baseline_window_gamma_multiplier
+        > recipe.integration_window_gamma_multiplier
+    )
     assert recipe.integration_detected_window_padding_width_multiplier >= 0.0
     assert recipe.fit_local_disagreement_ratio_threshold > 0.0
 
@@ -139,13 +145,19 @@ def test_local_integration_with_curves_populates_only_selected_window() -> None:
     assert np.all(np.isnan(curves.area_signal[outside_window]))
     assert np.all(np.isfinite(curves.absorption_signal[inside_window]))
     assert np.all(np.isfinite(curves.area_signal[inside_window]))
-    assert curves.area_signal[np.flatnonzero(inside_window)[-1]] == pytest.approx(integral.area_integral)
+    assert curves.area_signal[np.flatnonzero(inside_window)[-1]] == pytest.approx(
+        integral.area_integral
+    )
 
 
 def test_local_integration_excludes_other_component_windows_from_baseline() -> None:
     field = np.linspace(80.0, 140.0, 8001)
-    primary_signal = derivative_lorentzian(field, amplitude=1.2, center_mT=100.0, gamma_mT=0.6, offset=0.0)
-    secondary_signal = derivative_lorentzian(field, amplitude=0.8, center_mT=112.0, gamma_mT=0.6, offset=0.0)
+    primary_signal = derivative_lorentzian(
+        field, amplitude=1.2, center_mT=100.0, gamma_mT=0.6, offset=0.0
+    )
+    secondary_signal = derivative_lorentzian(
+        field, amplitude=0.8, center_mT=112.0, gamma_mT=0.6, offset=0.0
+    )
     recipe = EsrPreprocessingRecipe()
     peak_1_window = PeakWindow(
         label="peak_1",
@@ -183,7 +195,9 @@ def test_local_integration_excludes_other_component_windows_from_baseline() -> N
         peak_window=peak_1_window,
     )
     isolated = integrate_local_resonance(
-        ProcessedTrace(field_mT=field, signal=np.asarray(primary_signal + secondary_signal, dtype=float)),
+        ProcessedTrace(
+            field_mT=field, signal=np.asarray(primary_signal + secondary_signal, dtype=float)
+        ),
         recipe,
         label="peak_1",
         center_mT=100.0,

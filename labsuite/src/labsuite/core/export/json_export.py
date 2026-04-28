@@ -87,8 +87,12 @@ def _analysis_result_to_dict(result: AnalysisResult) -> dict[str, Any]:
                 "reason": result.fit_decision.reason,
                 "metrics": result.fit_decision.metrics,
             },
-            "single_fit": None if result.single_fit is None else _fit_result_to_dict(result.single_fit),
-            "single_fit_attempts": [_fit_attempt_to_dict(item) for item in result.single_fit_attempts],
+            "single_fit": None
+            if result.single_fit is None
+            else _fit_result_to_dict(result.single_fit),
+            "single_fit_attempts": [
+                _fit_attempt_to_dict(item) for item in result.single_fit_attempts
+            ],
             "peak_fits": [_peak_fit_result_to_dict(item) for item in result.peak_fits],
             "selected_fit_signal": result.selected_fit_signal.tolist(),
             "selected_residual": result.selected_residual.tolist(),
@@ -99,8 +103,12 @@ def _analysis_result_to_dict(result: AnalysisResult) -> dict[str, Any]:
             "local_total": _integral_summary_to_dict(result.local_total_integral),
             "diagnostic_total": _integral_summary_to_dict(result.diagnostic_total_integral),
             "peaks": [_integral_summary_to_dict(item) for item in result.peak_integrals],
-            "fit_local_peaks": [_integral_summary_to_dict(item) for item in result.fit_local_peak_integrals],
-            "local_peaks": [_integral_summary_to_dict(item) for item in result.local_peak_integrals],
+            "fit_local_peaks": [
+                _integral_summary_to_dict(item) for item in result.fit_local_peak_integrals
+            ],
+            "local_peaks": [
+                _integral_summary_to_dict(item) for item in result.local_peak_integrals
+            ],
         },
     }
 
@@ -121,7 +129,9 @@ def _fit_result_to_dict(result) -> dict[str, Any]:
         },
         "convergence": _convergence_to_dict(result.convergence),
         "residual_summary": _residual_summary_to_dict(result.residual_summary),
-        "feature_summary": None if result.feature_summary is None else _feature_summary_to_dict(result.feature_summary),
+        "feature_summary": None
+        if result.feature_summary is None
+        else _feature_summary_to_dict(result.feature_summary),
         "bound_hits": result.bound_hits,
         "fitted_signal": result.fitted_signal.tolist(),
         "residual": result.residual.tolist(),
@@ -133,7 +143,9 @@ def _fit_attempt_to_dict(result) -> dict[str, Any]:
     return {
         "scope": result.scope,
         "fit": _fit_result_to_dict(result.fit),
-        "source_window": None if result.source_window is None else {
+        "source_window": None
+        if result.source_window is None
+        else {
             "start_index": result.source_window.start_index,
             "end_index": result.source_window.end_index,
             "start_field_mT": result.source_window.start_field_mT,
@@ -182,7 +194,9 @@ def _integral_summary_to_dict(result) -> dict[str, Any]:
         "integration_kind": result.integration_kind,
         "window_source": result.window_source,
         "baseline_polyorder": result.baseline_polyorder,
-        "integration_window_clipped_by_detected_window": result.integration_window_clipped_by_detected_window,
+        "integration_window_clipped_by_detected_window": (
+            result.integration_window_clipped_by_detected_window
+        ),
     }
 
 
@@ -206,7 +220,9 @@ def _windowed_integrated_curves_to_dict(result) -> dict[str, Any]:
         "integration_kind": result.integration_kind,
         "window_source": result.window_source,
         "baseline_polyorder": result.baseline_polyorder,
-        "integration_window_clipped_by_detected_window": result.integration_window_clipped_by_detected_window,
+        "integration_window_clipped_by_detected_window": (
+            result.integration_window_clipped_by_detected_window
+        ),
         "model_name": result.model_name,
     }
 

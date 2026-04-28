@@ -35,12 +35,23 @@ def build_fmr_series(
     replicate_id: str | None = None,
     geometry: str | None = None,
 ) -> FmrSeriesCollectionResult:
-    ordered = sorted(trace_fit_results, key=lambda item: (float(item.frequency_GHz), float("inf") if item.angle_deg is None else float(item.angle_deg), item.trace_id))
+    ordered = sorted(
+        trace_fit_results,
+        key=lambda item: (
+            float(item.frequency_GHz),
+            float("inf") if item.angle_deg is None else float(item.angle_deg),
+            item.trace_id,
+        ),
+    )
     first = ordered[0] if ordered else None
     sample_name = first.sample_name if first is not None else "unknown"
     angle_deg = first.angle_deg if first is not None else None
     nominal_temperature_K = first.temperature_K if first is not None else None
-    grouped: dict[str, list[tuple[FmrTraceFitResult, object]]] = {"single_unassigned": [], "mode_1": [], "mode_2": []}
+    grouped: dict[str, list[tuple[FmrTraceFitResult, object]]] = {
+        "single_unassigned": [],
+        "mode_1": [],
+        "mode_2": [],
+    }
     mode_counts = {"single": 0, "double": 0, "partial_double": 0}
     warnings: list[str] = []
     excluded_trace_ids = [item.trace_id for item in ordered if not item.accepted]
@@ -75,7 +86,20 @@ def build_fmr_series(
                 warnings.append(warning)
             else:
                 warnings.append(f"{label}:{warning}")
-    return FmrSeriesCollectionResult(sample_name=sample_name, angle_deg=angle_deg, nominal_temperature_K=nominal_temperature_K, measurement_mode=measurement_mode, series_by_label=series_by_label, warnings=warnings, metadata={"trace_count": len(ordered), "excluded_trace_count": len(excluded_trace_ids), "mode_counts": mode_counts, "field_polarity_correction": _collection_correction_summary(series_by_label)})
+    return FmrSeriesCollectionResult(
+        sample_name=sample_name,
+        angle_deg=angle_deg,
+        nominal_temperature_K=nominal_temperature_K,
+        measurement_mode=measurement_mode,
+        series_by_label=series_by_label,
+        warnings=warnings,
+        metadata={
+            "trace_count": len(ordered),
+            "excluded_trace_count": len(excluded_trace_ids),
+            "mode_counts": mode_counts,
+            "field_polarity_correction": _collection_correction_summary(series_by_label),
+        },
+    )
 
 
 def fit_fmr_physics(
@@ -95,7 +119,15 @@ def fit_fmr_physics(
             g_value=g_value,
         )
         warnings.extend(f"{label}:{warning}" for warning in physics_by_label[label].warnings)
-    return FmrPhysicsCollectionResult(sample_name=series_collection.sample_name, angle_deg=series_collection.angle_deg, nominal_temperature_K=series_collection.nominal_temperature_K, measurement_mode=series_collection.measurement_mode, physics_by_label=physics_by_label, warnings=warnings, metadata={"series_labels": sorted(physics_by_label), "series_count": len(physics_by_label)})
+    return FmrPhysicsCollectionResult(
+        sample_name=series_collection.sample_name,
+        angle_deg=series_collection.angle_deg,
+        nominal_temperature_K=series_collection.nominal_temperature_K,
+        measurement_mode=series_collection.measurement_mode,
+        physics_by_label=physics_by_label,
+        warnings=warnings,
+        metadata={"series_labels": sorted(physics_by_label), "series_count": len(physics_by_label)},
+    )
 
 
 def _build_single_series(
@@ -116,13 +148,27 @@ def _build_single_series(
         angle_deg=first_trace.angle_deg,
         nominal_temperature_K=first_trace.temperature_K,
         measurement_mode=measurement_mode,
-        frequency_GHz=np.asarray([trace.frequency_GHz for trace, _component in ordered], dtype=float),
-        resonance_field_mT=np.asarray([component.H_res_mT for _trace, component in ordered], dtype=float),
-        linewidth_mT=np.asarray([component.DeltaH_mT for _trace, component in ordered], dtype=float),
-        amplitude_symmetric=np.asarray([component.amplitude_symmetric for _trace, component in ordered], dtype=float),
-        amplitude_antisymmetric=np.asarray([component.amplitude_antisymmetric for _trace, component in ordered], dtype=float),
-        resonance_field_stderr_mT=np.asarray([_stderr_or_nan(component, "H_res_mT") for _trace, component in ordered], dtype=float),
-        linewidth_stderr_mT=np.asarray([_stderr_or_nan(component, "DeltaH_mT") for _trace, component in ordered], dtype=float),
+        frequency_GHz=np.asarray(
+            [trace.frequency_GHz for trace, _component in ordered], dtype=float
+        ),
+        resonance_field_mT=np.asarray(
+            [component.H_res_mT for _trace, component in ordered], dtype=float
+        ),
+        linewidth_mT=np.asarray(
+            [component.DeltaH_mT for _trace, component in ordered], dtype=float
+        ),
+        amplitude_symmetric=np.asarray(
+            [component.amplitude_symmetric for _trace, component in ordered], dtype=float
+        ),
+        amplitude_antisymmetric=np.asarray(
+            [component.amplitude_antisymmetric for _trace, component in ordered], dtype=float
+        ),
+        resonance_field_stderr_mT=np.asarray(
+            [_stderr_or_nan(component, "H_res_mT") for _trace, component in ordered], dtype=float
+        ),
+        linewidth_stderr_mT=np.asarray(
+            [_stderr_or_nan(component, "DeltaH_mT") for _trace, component in ordered], dtype=float
+        ),
         included_trace_ids=[trace.trace_id for trace, _component in ordered],
         included_component_ids=[component.component_id for _trace, component in ordered],
         excluded_trace_ids=list(excluded_trace_ids),
@@ -136,7 +182,11 @@ def _build_single_series(
                 replicate_id=replicate_id,
                 geometry=geometry,
             ),
-            "field_polarity_correction": {"enabled": False, "status": "disabled", "fit_field": "Hres"},
+            "field_polarity_correction": {
+                "enabled": False,
+                "status": "disabled",
+                "fit_field": "Hres",
+            },
         },
     )
     if recipe is not None and recipe.field_polarity_correction.enabled:
@@ -154,7 +204,15 @@ def _fit_single_series_physics(
     warnings = list(series.warnings)
     kittel_fit = None
     linewidth_fit = None
-    derived_parameters: dict[str, float | None] = {"gamma_GHz_per_T": None, "gamma_rad_per_s_T": None, "g": None, "M_eff_mT": None, "M_eff_T": None, "alpha": None, "DeltaH0_mT": None}
+    derived_parameters: dict[str, float | None] = {
+        "gamma_GHz_per_T": None,
+        "gamma_rad_per_s_T": None,
+        "g": None,
+        "M_eff_mT": None,
+        "M_eff_T": None,
+        "alpha": None,
+        "DeltaH0_mT": None,
+    }
     if series.frequency_GHz.size >= recipe.kittel_min_points:
         kittel_fit = _fit_kittel(
             series.frequency_GHz,
@@ -174,20 +232,28 @@ def _fit_single_series_physics(
         else:
             warnings.append("kittel_fit_failed")
     else:
-        warnings.append(f"kittel_fit_insufficient_points:{series.frequency_GHz.size}<{recipe.kittel_min_points}")
+        warnings.append(
+            f"kittel_fit_insufficient_points:{series.frequency_GHz.size}<{recipe.kittel_min_points}"
+        )
     if series.frequency_GHz.size >= recipe.linewidth_min_points:
         linewidth_fit = _fit_linewidth(series.frequency_GHz, series.linewidth_mT)
         if linewidth_fit.success:
             derived_parameters["DeltaH0_mT"] = linewidth_fit.parameters["DeltaH0_mT"]
             if derived_parameters["gamma_rad_per_s_T"] is not None:
                 slope_t_per_hz = linewidth_fit.parameters["slope_mT_per_GHz"] * 1e-12
-                derived_parameters["alpha"] = slope_t_per_hz * float(derived_parameters["gamma_rad_per_s_T"]) / (4.0 * math.pi)
+                derived_parameters["alpha"] = (
+                    slope_t_per_hz
+                    * float(derived_parameters["gamma_rad_per_s_T"])
+                    / (4.0 * math.pi)
+                )
             else:
                 warnings.append("alpha_requires_kittel_gamma")
         else:
             warnings.append("linewidth_fit_failed")
     else:
-        warnings.append(f"linewidth_fit_insufficient_points:{series.frequency_GHz.size}<{recipe.linewidth_min_points}")
+        warnings.append(
+            f"linewidth_fit_insufficient_points:{series.frequency_GHz.size}<{recipe.linewidth_min_points}"
+        )
     warnings.append("anisotropy_K_deferred_requires_explicit_model")
     metadata = {
         "series_label": series.series_label,
@@ -197,14 +263,27 @@ def _fit_single_series_physics(
         "anisotropy_K": "deferred",
         "field_polarity_correction": series.metadata.get("field_polarity_correction", {}),
     }
-    if recipe.field_polarity_correction.enabled and recipe.field_polarity_correction.run_comparison_fits:
+    if (
+        recipe.field_polarity_correction.enabled
+        and recipe.field_polarity_correction.run_comparison_fits
+    ):
         metadata["polarity_comparison_fits"] = _build_polarity_comparison_fits(
             series,
             g_mode=g_mode,
             g_value=g_value,
             min_points=recipe.kittel_min_points,
         )
-    return FmrPhysicsResult(sample_name=series.sample_name, angle_deg=series.angle_deg, nominal_temperature_K=series.nominal_temperature_K, measurement_mode=series.measurement_mode, kittel_fit=kittel_fit, linewidth_fit=linewidth_fit, derived_parameters=derived_parameters, warnings=warnings, metadata=metadata)
+    return FmrPhysicsResult(
+        sample_name=series.sample_name,
+        angle_deg=series.angle_deg,
+        nominal_temperature_K=series.nominal_temperature_K,
+        measurement_mode=series.measurement_mode,
+        kittel_fit=kittel_fit,
+        linewidth_fit=linewidth_fit,
+        derived_parameters=derived_parameters,
+        warnings=warnings,
+        metadata=metadata,
+    )
 
 
 def _raw_polarity_points(
@@ -216,8 +295,12 @@ def _raw_polarity_points(
 ) -> list[dict[str, object]]:
     points: list[dict[str, object]] = []
     for trace, component in entries:
-        field_polarity = component.metadata.get("field_polarity") or trace.metadata.get("field_polarity")
-        raw_label = component.metadata.get("field_polarity_raw") or trace.metadata.get("field_polarity_raw")
+        field_polarity = component.metadata.get("field_polarity") or trace.metadata.get(
+            "field_polarity"
+        )
+        raw_label = component.metadata.get("field_polarity_raw") or trace.metadata.get(
+            "field_polarity_raw"
+        )
         points.append(
             {
                 "series_label": series_label,
@@ -251,7 +334,11 @@ def _apply_field_polarity_correction(series: FmrSeriesResult, recipe: FmrRecipe)
     config = recipe.field_polarity_correction
     raw_points = [dict(point) for point in series.metadata.get("polarity_points", [])]
     series.metadata["raw_polarity_points"] = [dict(point) for point in raw_points]
-    polarities = {point.get("field_polarity") for point in raw_points if point.get("field_polarity") in {"positive", "negative"}}
+    polarities = {
+        point.get("field_polarity")
+        for point in raw_points
+        if point.get("field_polarity") in {"positive", "negative"}
+    }
     summary = {
         "enabled": True,
         "method": config.method,
@@ -278,7 +365,9 @@ def _apply_field_polarity_correction(series: FmrSeriesResult, recipe: FmrRecipe)
         or config.on_unpaired == "warn_and_keep_raw"
     ]
     if config.on_unpaired == "drop":
-        fit_points = [point for point in paired_points if point.get("polarity_pair_status") == "paired"]
+        fit_points = [
+            point for point in paired_points if point.get("polarity_pair_status") == "paired"
+        ]
     if not fit_points:
         summary["status"] = "skipped_no_pairable_points"
         summary["warning"] = "field_polarity_correction_no_pairable_points"
@@ -288,11 +377,17 @@ def _apply_field_polarity_correction(series: FmrSeriesResult, recipe: FmrRecipe)
         return
 
     series.frequency_GHz = np.asarray([point["frequency_GHz"] for point in fit_points], dtype=float)
-    series.resonance_field_mT = np.asarray([_fit_hres_value(point, config.fit_field) for point in fit_points], dtype=float)
-    series.linewidth_mT = np.asarray([point.get("DeltaH_fit_mT") for point in fit_points], dtype=float)
+    series.resonance_field_mT = np.asarray(
+        [_fit_hres_value(point, config.fit_field) for point in fit_points], dtype=float
+    )
+    series.linewidth_mT = np.asarray(
+        [point.get("DeltaH_fit_mT") for point in fit_points], dtype=float
+    )
     series.included_trace_ids = [str(point.get("trace_id") or "") for point in fit_points]
     series.included_component_ids = [str(point.get("component_id") or "") for point in fit_points]
-    summary["paired_point_count"] = sum(1 for point in paired_points if point.get("polarity_pair_status") == "paired")
+    summary["paired_point_count"] = sum(
+        1 for point in paired_points if point.get("polarity_pair_status") == "paired"
+    )
     summary["status"] = "applied" if summary["paired_point_count"] else "skipped_no_pairs"
     summary["fit_field"] = config.fit_field if summary["paired_point_count"] else "Hres"
     series.metadata["field_polarity_correction"] = summary
@@ -333,14 +428,26 @@ def _pair_polarity_points(
     for index, negative in enumerate(negatives):
         if index not in used_negative_ids:
             output.append(_unpaired_point(negative, "unpaired_negative", recipe))
-            warnings.append(f"field_polarity_correction_unpaired_negative:{negative.get('component_id')}")
+            warnings.append(
+                f"field_polarity_correction_unpaired_negative:{negative.get('component_id')}"
+            )
     for point in raw_points:
         if point.get("field_polarity") not in {"positive", "negative"}:
             output.append(_unpaired_point(point, "unknown_polarity", recipe))
-            warnings.append(f"field_polarity_correction_unknown_polarity:{point.get('component_id')}")
-    if config.on_unpaired == "fail" and any(point.get("polarity_pair_status") != "paired" for point in output):
+            warnings.append(
+                f"field_polarity_correction_unknown_polarity:{point.get('component_id')}"
+            )
+    if config.on_unpaired == "fail" and any(
+        point.get("polarity_pair_status") != "paired" for point in output
+    ):
         raise WorkflowError("field_polarity_correction_unpaired_points")
-    return sorted(output, key=lambda item: (float(item.get("frequency_GHz") or 0.0), str(item.get("component_id") or ""))), warnings
+    return sorted(
+        output,
+        key=lambda item: (
+            float(item.get("frequency_GHz") or 0.0),
+            str(item.get("component_id") or ""),
+        ),
+    ), warnings
 
 
 def _paired_point(
@@ -365,9 +472,13 @@ def _paired_point(
     point = dict(positive)
     point.update(
         {
-            "frequency_GHz": float(np.mean([float(positive["frequency_GHz"]), float(negative["frequency_GHz"])])),
+            "frequency_GHz": float(
+                np.mean([float(positive["frequency_GHz"]), float(negative["frequency_GHz"])])
+            ),
             "field_polarity": "paired",
-            "field_polarity_raw": f"{positive.get('field_polarity_raw')}|{negative.get('field_polarity_raw')}",
+            "field_polarity_raw": (
+                f"{positive.get('field_polarity_raw')}|{negative.get('field_polarity_raw')}"
+            ),
             "polarity_pair_id": pair_id,
             "polarity_pair_status": status,
             "trace_id": f"{positive.get('trace_id')}|{negative.get('trace_id')}",
@@ -377,8 +488,12 @@ def _paired_point(
             "Hres_avg_mT": hres_avg if status == "paired" else None,
             "Hres_offset_mT": hres_offset if status == "paired" else None,
             "Hres_split_mT": hres_split,
-            "DeltaH_fit_mT": float(np.mean([float(positive["DeltaH_raw_mT"]), float(negative["DeltaH_raw_mT"])])),
-            "fit_field": recipe.field_polarity_correction.fit_field if status == "paired" else "Hres",
+            "DeltaH_fit_mT": float(
+                np.mean([float(positive["DeltaH_raw_mT"]), float(negative["DeltaH_raw_mT"])])
+            ),
+            "fit_field": recipe.field_polarity_correction.fit_field
+            if status == "paired"
+            else "Hres",
         }
     )
     if status != "paired":
@@ -434,7 +549,10 @@ def _build_polarity_comparison_fits(
             and (polarity is None or point.get("field_polarity") == polarity)
         ]
         if len(rows) < min_points:
-            comparisons[label] = {"success": False, "message": f"insufficient_points:{len(rows)}<{min_points}"}
+            comparisons[label] = {
+                "success": False,
+                "message": f"insufficient_points:{len(rows)}<{min_points}",
+            }
             continue
         fit = _fit_kittel(
             np.asarray([float(point["frequency_GHz"]) for point in rows], dtype=float),
@@ -452,7 +570,9 @@ def _build_polarity_comparison_fits(
     return comparisons
 
 
-def _collection_correction_summary(series_by_label: dict[str, FmrSeriesResult]) -> dict[str, object]:
+def _collection_correction_summary(
+    series_by_label: dict[str, FmrSeriesResult],
+) -> dict[str, object]:
     summaries = [
         series.metadata.get("field_polarity_correction", {})
         for series in series_by_label.values()
@@ -495,7 +615,9 @@ def _fit_kittel(
                 message="fit converged",
                 parameters={"gamma_GHz_per_T": float(gamma_from_g), "M_eff_T": m_eff_t},
                 stderr={"gamma_GHz_per_T": None, "M_eff_T": _single_stderr(covariance)},
-                metrics=_fit_metrics(np.asarray(frequency_GHz, dtype=float), np.asarray(fitted_y, dtype=float)),
+                metrics=_fit_metrics(
+                    np.asarray(frequency_GHz, dtype=float), np.asarray(fitted_y, dtype=float)
+                ),
                 x=resonance_field_mT.tolist(),
                 y=frequency_GHz.tolist(),
                 fitted_y=np.asarray(fitted_y, dtype=float).tolist(),
@@ -523,22 +645,72 @@ def _fit_kittel(
             maxfev=20000,
         )
     except RuntimeError as exc:
-        return FmrModelFitSummary(model_name="ip_field_swept_kittel", success=False, message=str(exc), x=resonance_field_mT.tolist(), y=frequency_GHz.tolist(), warnings=warnings)
+        return FmrModelFitSummary(
+            model_name="ip_field_swept_kittel",
+            success=False,
+            message=str(exc),
+            x=resonance_field_mT.tolist(),
+            y=frequency_GHz.tolist(),
+            warnings=warnings,
+        )
     fitted_y = _ip_field_swept_kittel(resonance_field_T, *params)
-    model_name = "ip_field_swept_kittel_gamma_bounded" if normalized_mode == "bounded" else "ip_field_swept_kittel"
-    return FmrModelFitSummary(model_name=model_name, success=True, message="fit converged", parameters={"gamma_GHz_per_T": float(params[0]), "M_eff_T": float(params[1])}, stderr=_stderr_dict(["gamma_GHz_per_T", "M_eff_T"], covariance), metrics=_fit_metrics(np.asarray(frequency_GHz, dtype=float), np.asarray(fitted_y, dtype=float)), x=resonance_field_mT.tolist(), y=frequency_GHz.tolist(), fitted_y=np.asarray(fitted_y, dtype=float).tolist(), warnings=warnings)
+    model_name = (
+        "ip_field_swept_kittel_gamma_bounded"
+        if normalized_mode == "bounded"
+        else "ip_field_swept_kittel"
+    )
+    return FmrModelFitSummary(
+        model_name=model_name,
+        success=True,
+        message="fit converged",
+        parameters={"gamma_GHz_per_T": float(params[0]), "M_eff_T": float(params[1])},
+        stderr=_stderr_dict(["gamma_GHz_per_T", "M_eff_T"], covariance),
+        metrics=_fit_metrics(
+            np.asarray(frequency_GHz, dtype=float), np.asarray(fitted_y, dtype=float)
+        ),
+        x=resonance_field_mT.tolist(),
+        y=frequency_GHz.tolist(),
+        fitted_y=np.asarray(fitted_y, dtype=float).tolist(),
+        warnings=warnings,
+    )
 
 
 def _fit_linewidth(frequency_GHz: np.ndarray, linewidth_mT: np.ndarray) -> FmrModelFitSummary:
     try:
-        params, covariance = curve_fit(_line_width_model, np.asarray(frequency_GHz, dtype=float), np.asarray(linewidth_mT, dtype=float), p0=(float(np.nanmin(linewidth_mT)), 0.1), maxfev=20000)
+        params, covariance = curve_fit(
+            _line_width_model,
+            np.asarray(frequency_GHz, dtype=float),
+            np.asarray(linewidth_mT, dtype=float),
+            p0=(float(np.nanmin(linewidth_mT)), 0.1),
+            maxfev=20000,
+        )
     except RuntimeError as exc:
-        return FmrModelFitSummary(model_name="linewidth_vs_frequency_linear", success=False, message=str(exc), x=frequency_GHz.tolist(), y=linewidth_mT.tolist())
+        return FmrModelFitSummary(
+            model_name="linewidth_vs_frequency_linear",
+            success=False,
+            message=str(exc),
+            x=frequency_GHz.tolist(),
+            y=linewidth_mT.tolist(),
+        )
     fitted_y = _line_width_model(np.asarray(frequency_GHz, dtype=float), *params)
-    return FmrModelFitSummary(model_name="linewidth_vs_frequency_linear", success=True, message="fit converged", parameters={"DeltaH0_mT": float(params[0]), "slope_mT_per_GHz": float(params[1])}, stderr=_stderr_dict(["DeltaH0_mT", "slope_mT_per_GHz"], covariance), metrics=_fit_metrics(np.asarray(linewidth_mT, dtype=float), np.asarray(fitted_y, dtype=float)), x=frequency_GHz.tolist(), y=linewidth_mT.tolist(), fitted_y=np.asarray(fitted_y, dtype=float).tolist())
+    return FmrModelFitSummary(
+        model_name="linewidth_vs_frequency_linear",
+        success=True,
+        message="fit converged",
+        parameters={"DeltaH0_mT": float(params[0]), "slope_mT_per_GHz": float(params[1])},
+        stderr=_stderr_dict(["DeltaH0_mT", "slope_mT_per_GHz"], covariance),
+        metrics=_fit_metrics(
+            np.asarray(linewidth_mT, dtype=float), np.asarray(fitted_y, dtype=float)
+        ),
+        x=frequency_GHz.tolist(),
+        y=linewidth_mT.tolist(),
+        fitted_y=np.asarray(fitted_y, dtype=float).tolist(),
+    )
 
 
-def _ip_field_swept_kittel(resonance_field_T: np.ndarray, gamma_GHz_per_T: float, M_eff_T: float) -> np.ndarray:
+def _ip_field_swept_kittel(
+    resonance_field_T: np.ndarray, gamma_GHz_per_T: float, M_eff_T: float
+) -> np.ndarray:
     return gamma_GHz_per_T * np.sqrt(resonance_field_T * (resonance_field_T + M_eff_T))
 
 
@@ -555,13 +727,19 @@ def _single_stderr(covariance: np.ndarray | None) -> float | None:
     return float(diagonal[0])
 
 
-def _line_width_model(frequency_GHz: np.ndarray, DeltaH0_mT: float, slope_mT_per_GHz: float) -> np.ndarray:
+def _line_width_model(
+    frequency_GHz: np.ndarray, DeltaH0_mT: float, slope_mT_per_GHz: float
+) -> np.ndarray:
     return DeltaH0_mT + slope_mT_per_GHz * frequency_GHz
 
 
 def _stderr_or_nan(component, parameter_name: str) -> float:
     diagnostic = component.parameter_diagnostics.get(parameter_name)
-    return float("nan") if diagnostic is None or diagnostic.stderr is None else float(diagnostic.stderr)
+    return (
+        float("nan")
+        if diagnostic is None or diagnostic.stderr is None
+        else float(diagnostic.stderr)
+    )
 
 
 def _stderr_dict(names: list[str], covariance: np.ndarray | None) -> dict[str, float | None]:
@@ -575,4 +753,8 @@ def _fit_metrics(y_true: np.ndarray, y_fit: np.ndarray) -> dict[str, float]:
     residual = y_true - y_fit
     rss = float(np.sum(residual**2))
     ss_tot = float(np.sum((y_true - np.mean(y_true)) ** 2))
-    return {"rss": rss, "rmse": float(np.sqrt(np.mean(residual**2))), "r_squared": 1.0 if ss_tot == 0.0 else 1.0 - (rss / ss_tot)}
+    return {
+        "rss": rss,
+        "rmse": float(np.sqrt(np.mean(residual**2))),
+        "r_squared": 1.0 if ss_tot == 0.0 else 1.0 - (rss / ss_tot),
+    }

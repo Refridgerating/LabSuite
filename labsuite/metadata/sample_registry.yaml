@@ -1,4 +1,4 @@
-schema_version: 1
+schema_version: 2
 samples:
   MTJ-NoPattern:
     sample_id: MTJ-NoPattern
@@ -20,8 +20,35 @@ samples:
         unit: null
         uncertainty: null
         method: null
+      shape: square
+      dimensions:
+        side: 4
+        side_unit: mm
+    layer_stack:
+      - material: Ta
+        thickness: 2
+        thickness_unit: nm
+        magnetic: false
+      - material: Co
+        thickness: 5
+        thickness_unit: nm
+        magnetic: true
+      - material: NiFe
+        thickness: 2
+        thickness_unit: nm
+        magnetic: true
+      - material: AlOx
+        thickness: 0.5
+        thickness_unit: nm
+        magnetic: false
+      - material: NiFe
+        thickness: 7
+        thickness_unit: nm
+        magnetic: true
+    magnetic_volume_m3: 2.24e-13
+    magnetic_volume_source: estimated
+    magnetic_volume_method: geometry_area_times_magnetic_layer_thickness
     defaults:
       g_mode: float
       g_value: null
       ms_source: null
-    measurements: []

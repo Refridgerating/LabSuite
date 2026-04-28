@@ -11,9 +11,6 @@ SRC_ROOT = PROJECT_ROOT / "src"
 if str(SRC_ROOT) not in sys.path:
     sys.path.insert(0, str(SRC_ROOT))
 
-from labsuite.cli.main import DEFAULT_RECIPE
-from labsuite.workflows.single_file import run_esr_single_file_workflow
-
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser()
@@ -28,10 +25,12 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main() -> int:
+    from labsuite.workflows.single_file import run_esr_single_file_workflow
+
     args = build_parser().parse_args()
     analysis, artifacts = run_esr_single_file_workflow(
         source_path=args.source_file.resolve(),
-        recipe_path=DEFAULT_RECIPE,
+        recipe_path=PROJECT_ROOT / "recipes" / "esr" / "default.yaml",
         output_dir=args.output_dir.resolve(),
     )
     print(f"points={analysis.dataset.field_mT.size}")

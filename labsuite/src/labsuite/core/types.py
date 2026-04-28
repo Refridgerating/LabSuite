@@ -126,7 +126,7 @@ class FitAttemptRecord:
 
     scope: Literal["global_full_trace", "detected_window_fallback", "peak_window_local"]
     fit: FitResult
-    source_window: "PeakWindow | None"
+    source_window: PeakWindow | None
     accepted: bool
     rejection_reason: str | None
     selected_for_primary: bool
@@ -182,7 +182,12 @@ class IntegralSummary:
     end_field_mT: float
     absorption_integral: float | None
     area_integral: float | None
-    integration_kind: Literal["primary_fit_model", "fit_local_windowed_model", "primary_local_window", "diagnostic_full_span"]
+    integration_kind: Literal[
+        "primary_fit_model",
+        "fit_local_windowed_model",
+        "primary_local_window",
+        "diagnostic_full_span",
+    ]
     window_source: Literal["fit_linewidth"] | None
     baseline_polyorder: int | None
     integration_window_clipped_by_detected_window: bool

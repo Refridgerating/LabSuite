@@ -85,7 +85,9 @@ def export_analysis_csv(
             )
         ):
             values = [f"{value:.10g}" for value in row]
-            values.extend(f"{component_signals[label][row_index]:.10g}" for label in component_signals)
+            values.extend(
+                f"{component_signals[label][row_index]:.10g}" for label in component_signals
+            )
             writer.writerow(values)
 
     if summary_destination is not None:
@@ -189,7 +191,9 @@ def export_analysis_summary_csv(result: AnalysisResult, destination: Path) -> Pa
         "signal_polarity",
     ]
 
-    metrics_by_target = {item.owner_id: flatten_resonance_metrics(item) for item in result.resonance_metrics}
+    metrics_by_target = {
+        item.owner_id: flatten_resonance_metrics(item) for item in result.resonance_metrics
+    }
     rows: list[dict[str, object]] = []
     if result.single_fit is not None:
         rows.append(
@@ -204,7 +208,9 @@ def export_analysis_summary_csv(result: AnalysisResult, destination: Path) -> Pa
     for peak_fit in result.peak_fits:
         rows.append(
             _fit_summary_row(
-                target=peak_fit.label if result.selected_mode == "split" else f"{peak_fit.label}_candidate",
+                target=peak_fit.label
+                if result.selected_mode == "split"
+                else f"{peak_fit.label}_candidate",
                 mode="split",
                 fit=peak_fit.fit,
                 result=result,
@@ -260,11 +266,21 @@ def _fit_summary_row(
         "residual_max_abs": fit.residual_summary.max_abs,
         "residual_mean": fit.residual_summary.mean,
         "residual_std": fit.residual_summary.std,
-        "positive_extremum_field_mT": None if fit.feature_summary is None else fit.feature_summary.positive_extremum_field_mT,
-        "negative_extremum_field_mT": None if fit.feature_summary is None else fit.feature_summary.negative_extremum_field_mT,
-        "zero_crossing_field_mT": None if fit.feature_summary is None else fit.feature_summary.zero_crossing_field_mT,
-        "peak_to_peak_separation_mT": None if fit.feature_summary is None else fit.feature_summary.peak_to_peak_separation_mT,
-        "integrated_intensity_proxy": None if fit.feature_summary is None else fit.feature_summary.integrated_intensity_proxy,
+        "positive_extremum_field_mT": None
+        if fit.feature_summary is None
+        else fit.feature_summary.positive_extremum_field_mT,
+        "negative_extremum_field_mT": None
+        if fit.feature_summary is None
+        else fit.feature_summary.negative_extremum_field_mT,
+        "zero_crossing_field_mT": None
+        if fit.feature_summary is None
+        else fit.feature_summary.zero_crossing_field_mT,
+        "peak_to_peak_separation_mT": None
+        if fit.feature_summary is None
+        else fit.feature_summary.peak_to_peak_separation_mT,
+        "integrated_intensity_proxy": None
+        if fit.feature_summary is None
+        else fit.feature_summary.integrated_intensity_proxy,
         "fit_local_windowed_intensity_proxy": fit.derived.get("fit_local_windowed_intensity_proxy"),
         "local_windowed_intensity_proxy": fit.derived.get("local_windowed_intensity_proxy"),
         "fit_local_disagreement_ratio": fit.derived.get("fit_local_disagreement_ratio"),
@@ -295,7 +311,9 @@ def _fit_summary_row(
         diagnostic = fit.parameter_diagnostics.get(parameter_name)
         row[parameter_name] = None if diagnostic is None else diagnostic.value
         row[f"{parameter_name}_stderr"] = None if diagnostic is None else diagnostic.stderr
-        row[f"{parameter_name}_relative_stderr"] = None if diagnostic is None else diagnostic.relative_stderr
+        row[f"{parameter_name}_relative_stderr"] = (
+            None if diagnostic is None else diagnostic.relative_stderr
+        )
         row[f"{parameter_name}_hit_bound"] = fit.bound_hits.get(parameter_name)
     return row
 
@@ -317,7 +335,8 @@ def _selected_split_row(result: AnalysisResult) -> dict[str, object]:
         "absorption_baseline_intercept": result.absorption_baseline.intercept,
         "r_squared": result.fit_decision.metrics.get("split_r_squared"),
         "chi_square": float((result.selected_residual**2).sum()),
-        "reduced_chi_square": float((result.selected_residual**2).sum()) / max(result.selected_residual.size - 1, 1),
+        "reduced_chi_square": float((result.selected_residual**2).sum())
+        / max(result.selected_residual.size - 1, 1),
         "sum_squared_residuals": float((result.selected_residual**2).sum()),
         "residual_rss": float((result.selected_residual**2).sum()),
         "residual_rmse": float((result.selected_residual**2).mean() ** 0.5),
@@ -344,7 +363,9 @@ def _selected_split_row(result: AnalysisResult) -> dict[str, object]:
         "fit_valid": True,
         "fit_rejection_reason": None,
         "selected_for_primary": True,
-        "integration_window_clipped_by_detected_window": result.local_total_integral.integration_window_clipped_by_detected_window,
+        "integration_window_clipped_by_detected_window": (
+            result.local_total_integral.integration_window_clipped_by_detected_window
+        ),
         "amplitude": None,
         "amplitude_stderr": None,
         "amplitude_relative_stderr": None,

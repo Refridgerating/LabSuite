@@ -11,8 +11,7 @@ from matplotlib.font_manager import FontProperties
 from matplotlib.text import Text
 
 from labsuite.core.resonance_metrics import ResonanceAreaWindow, ResonanceModeMetrics
-from labsuite.core.types import AnalysisResult, FitResult, PeakFitResult
-
+from labsuite.core.types import AnalysisResult, FitResult
 
 _SUMMARY_FONT_SIZE = 8
 _SUMMARY_FONT_FAMILY = "monospace"
@@ -166,20 +165,31 @@ def _place_axis_footer_text_below(axis, text: str, *, y_offset: float) -> None:
         fontsize=_SUMMARY_FONT_SIZE,
         family=_SUMMARY_FONT_FAMILY,
         clip_on=False,
-        bbox={"boxstyle": "round,pad=0.35", "facecolor": "white", "alpha": 0.85, "edgecolor": "0.75"},
+        bbox={
+            "boxstyle": "round,pad=0.35",
+            "facecolor": "white",
+            "alpha": 0.85,
+            "edgecolor": "0.75",
+        },
     )
     footer.set_in_layout(True)
 
 
-def _wrap_footer_text_to_axis_width(axis, text: str, renderer, *, fontsize: float, family: str) -> str:
+def _wrap_footer_text_to_axis_width(
+    axis, text: str, renderer, *, fontsize: float, family: str
+) -> str:
     axis_width_px = axis.get_window_extent(renderer=renderer).width
     max_text_width_px = max(axis_width_px - 24.0, 160.0)
     font_properties = FontProperties(family=family, size=fontsize)
-    char_width_px = _measure_text_block_width(axis.figure, "M" * 40, renderer, font_properties) / 40.0
+    char_width_px = (
+        _measure_text_block_width(axis.figure, "M" * 40, renderer, font_properties) / 40.0
+    )
     max_chars = max(28, int(max_text_width_px / max(char_width_px, 1.0)))
     wrapped_text = _wrap_footer_lines(text, width=max_chars)
     while max_chars > 28:
-        wrapped_width = _measure_text_block_width(axis.figure, wrapped_text, renderer, font_properties)
+        wrapped_width = _measure_text_block_width(
+            axis.figure, wrapped_text, renderer, font_properties
+        )
         if wrapped_width <= max_text_width_px:
             break
         max_chars -= 2
@@ -187,7 +197,9 @@ def _wrap_footer_text_to_axis_width(axis, text: str, renderer, *, fontsize: floa
     return wrapped_text
 
 
-def _measure_text_block_width(figure, text: str, renderer, font_properties: FontProperties) -> float:
+def _measure_text_block_width(
+    figure, text: str, renderer, font_properties: FontProperties
+) -> float:
     probe = Text(0.0, 0.0, text, fontproperties=font_properties)
     probe.set_figure(figure)
     return probe.get_window_extent(renderer=renderer).width
@@ -233,16 +245,34 @@ def _draw_feature_markers(axis, fit: FitResult, *, alpha: float = 0.8) -> None:
     feature = fit.feature_summary
     if feature is None:
         return
-    axis.axvline(feature.positive_extremum_field_mT, color="#2ca02c", linestyle=":", linewidth=1.0, alpha=alpha)
-    axis.axvline(feature.negative_extremum_field_mT, color="#ff7f0e", linestyle=":", linewidth=1.0, alpha=alpha)
-    axis.axvline(feature.zero_crossing_field_mT, color="#7f7f7f", linestyle="--", linewidth=1.0, alpha=alpha)
+    axis.axvline(
+        feature.positive_extremum_field_mT,
+        color="#2ca02c",
+        linestyle=":",
+        linewidth=1.0,
+        alpha=alpha,
+    )
+    axis.axvline(
+        feature.negative_extremum_field_mT,
+        color="#ff7f0e",
+        linestyle=":",
+        linewidth=1.0,
+        alpha=alpha,
+    )
+    axis.axvline(
+        feature.zero_crossing_field_mT, color="#7f7f7f", linestyle="--", linewidth=1.0, alpha=alpha
+    )
 
 
 def _draw_selected_integration_windows(axis, result: AnalysisResult) -> None:
     windows = (
         [window for window in result.local_peak_integrals if window.area_integral is not None]
         if result.selected_mode == "split" and result.local_peak_integrals
-        else ([result.local_total_integral] if result.local_total_integral.area_integral is not None else [])
+        else (
+            [result.local_total_integral]
+            if result.local_total_integral.area_integral is not None
+            else []
+        )
     )
     for window in windows:
         axis.axvspan(
@@ -262,16 +292,39 @@ def _draw_absorption_resonance_metrics(axis, result: AnalysisResult) -> None:
         if not metrics.success:
             continue
         label_prefix = metrics.owner_id
-        axis.axvline(metrics.hres, color="#111827", linestyle="--", linewidth=1.0, alpha=0.75, label=f"{label_prefix} hres")
+        axis.axvline(
+            metrics.hres,
+            color="#111827",
+            linestyle="--",
+            linewidth=1.0,
+            alpha=0.75,
+            label=f"{label_prefix} hres",
+        )
         if metrics.h_left_half is not None:
-            axis.axvline(metrics.h_left_half, color="#0f766e", linestyle=":", linewidth=1.0, alpha=0.75, label=f"{label_prefix} half-max left")
+            axis.axvline(
+                metrics.h_left_half,
+                color="#0f766e",
+                linestyle=":",
+                linewidth=1.0,
+                alpha=0.75,
+                label=f"{label_prefix} half-max left",
+            )
         if metrics.h_right_half is not None:
-            axis.axvline(metrics.h_right_half, color="#b45309", linestyle=":", linewidth=1.0, alpha=0.75, label=f"{label_prefix} half-max right")
+            axis.axvline(
+                metrics.h_right_half,
+                color="#b45309",
+                linestyle=":",
+                linewidth=1.0,
+                alpha=0.75,
+                label=f"{label_prefix} half-max right",
+            )
     if result.resonance_metrics_config.get("plot_area_windows", False):
         for area_window in _visible_area_windows(result.resonance_metrics):
             if area_window.start_field_mT is None or area_window.end_field_mT is None:
                 continue
-            axis.axvspan(area_window.start_field_mT, area_window.end_field_mT, color="#fde68a", alpha=0.08)
+            axis.axvspan(
+                area_window.start_field_mT, area_window.end_field_mT, color="#fde68a", alpha=0.08
+            )
 
 
 def _draw_area_window_annotations(axis, result: AnalysisResult) -> None:
@@ -282,7 +335,9 @@ def _draw_area_window_annotations(axis, result: AnalysisResult) -> None:
     for area_window in _visible_area_windows(result.resonance_metrics):
         if area_window.start_field_mT is None or area_window.end_field_mT is None:
             continue
-        axis.axvspan(area_window.start_field_mT, area_window.end_field_mT, color="#ddd6fe", alpha=0.08)
+        axis.axvspan(
+            area_window.start_field_mT, area_window.end_field_mT, color="#ddd6fe", alpha=0.08
+        )
 
 
 def _visible_area_windows(metrics_records: list[ResonanceModeMetrics]) -> list[ResonanceAreaWindow]:
@@ -297,10 +352,12 @@ def _visible_area_windows(metrics_records: list[ResonanceModeMetrics]) -> list[R
 
 
 def _build_summary_text(result: AnalysisResult) -> str:
+    derivative_baseline = result.derivative_baseline
+    absorption_baseline = result.absorption_baseline
     lines = [
         f"mode: {result.selected_mode}",
-        f"deriv baseline: m={result.derivative_baseline.slope:.3g}, b={result.derivative_baseline.intercept:.3g}",
-        f"diag abs base:  m={result.absorption_baseline.slope:.3g}, b={result.absorption_baseline.intercept:.3g}",
+        f"deriv baseline: m={derivative_baseline.slope:.3g}, b={derivative_baseline.intercept:.3g}",
+        f"diag abs base:  m={absorption_baseline.slope:.3g}, b={absorption_baseline.intercept:.3g}",
     ]
     if result.primary_integrated is None:
         lines.append("plotting diagnostic fallback curves")
@@ -311,7 +368,11 @@ def _build_summary_text(result: AnalysisResult) -> str:
     if result.local_integrated is not None:
         lines.append("dashed curves: local data-derived diagnostic")
     if result.fit_local_disagreement_flag:
-        ratio_text = "NA" if result.fit_local_disagreement_ratio is None else f"{result.fit_local_disagreement_ratio:.3g}"
+        ratio_text = (
+            "NA"
+            if result.fit_local_disagreement_ratio is None
+            else f"{result.fit_local_disagreement_ratio:.3g}"
+        )
         lines.append(f"qc warning: fit-local vs data-local ratio={ratio_text}")
         lines.append(f"qc detail: {_format_summary_detail(result.fit_local_disagreement_reason)}")
     if result.selected_mode == "single" and result.single_fit is not None:
@@ -329,9 +390,9 @@ def _build_summary_text(result: AnalysisResult) -> str:
             lines.append(f"global rejected: {rejected_global.rejection_reason}")
         lines.extend(_fit_text_lines("selected", result.single_fit))
     else:
-        lines.append(
-            f"selected rss={float((result.selected_residual**2).sum()):.3g}, rmse={float(((result.selected_residual**2).mean())**0.5):.3g}"
-        )
+        selected_rss = float((result.selected_residual**2).sum())
+        selected_rmse = float(((result.selected_residual**2).mean()) ** 0.5)
+        lines.append(f"selected rss={selected_rss:.3g}, rmse={selected_rmse:.3g}")
         for peak_fit in result.peak_fits:
             lines.extend(_fit_text_lines(peak_fit.label, peak_fit.fit, compact=True))
     return "\n".join(lines)
@@ -342,7 +403,9 @@ def _fit_text_lines(label: str, fit: FitResult, *, compact: bool = False) -> lis
     if feature is None:
         return [f"{label}: no feature summary"]
     uncertainty = fit.parameter_diagnostics.get("center_mT")
-    center_err = "NA" if uncertainty is None or uncertainty.stderr is None else f"{uncertainty.stderr:.3g}"
+    center_err = (
+        "NA" if uncertainty is None or uncertainty.stderr is None else f"{uncertainty.stderr:.3g}"
+    )
     line = _format_fit_summary_line(
         label,
         zero_crossing_field_mT=feature.zero_crossing_field_mT,
@@ -353,10 +416,14 @@ def _fit_text_lines(label: str, fit: FitResult, *, compact: bool = False) -> lis
     )
     if compact:
         return [line, f"  conv={fit.convergence.success}, bounds={any(fit.bound_hits.values())}"]
+    bound_hit = any(fit.bound_hits.values())
+    fit_integral = feature.integrated_intensity_proxy
+    if fit_integral is None:
+        fit_integral = float("nan")
     return [
         line,
-        f"  conv={fit.convergence.success}, msg={fit.convergence.message}, bounds={any(fit.bound_hits.values())}",
-        f"  Ifit={feature.integrated_intensity_proxy if feature.integrated_intensity_proxy is not None else float('nan'):.3g}",
+        f"  conv={fit.convergence.success}, msg={fit.convergence.message}, bounds={bound_hit}",
+        f"  Ifit={fit_integral:.3g}",
     ]
 
 

@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from datetime import datetime
 from pathlib import Path
-from typing import Literal, Sequence
+from typing import Literal
 
 from labsuite.core.recipes import load_esr_recipe
 from labsuite.core.resonance_metrics import ResonanceMetricsConfig
@@ -22,10 +23,12 @@ from labsuite.plugins.esr.serialization import (
 from labsuite.workflows.measurement_batch import (
     BatchItemResult,
     BatchRunResult,
-    build_default_batch_output_dir as build_default_measurement_batch_output_dir,
     discover_source_files,
     run_batch_workflow,
     write_batch_outputs,
+)
+from labsuite.workflows.measurement_batch import (
+    build_default_batch_output_dir as build_default_measurement_batch_output_dir,
 )
 from labsuite.workflows.single_file import run_esr_single_file_workflow
 
@@ -71,6 +74,9 @@ def run_esr_batch_workflow(
     show_raw: bool = False,
     resonance_metrics_config: ResonanceMetricsConfig | None = None,
     registry_options: RegistryWorkflowOptions | None = None,
+    metadata_by_source: dict[str, dict[str, object]] | None = None,
+    raw_import_modality: str | None = None,
+    raw_import_root: Path | None = None,
 ) -> BatchRunResult:
     """Run the ESR workflow across every discovered source file."""
 
@@ -90,6 +96,9 @@ def run_esr_batch_workflow(
             "show_raw": show_raw,
             "resonance_metrics_config": resonance_metrics_config,
             "registry_options": registry_options,
+            "metadata_by_source": metadata_by_source,
+            "raw_import_modality": raw_import_modality,
+            "raw_import_root": raw_import_root,
         },
     )
 
@@ -119,6 +128,7 @@ def run_esr_batch_workflow(
         batch_figure_paths=batch_result.batch_figure_paths,
         resonance_metrics_csv_path=batch_result.resonance_metrics_csv_path,
         unresolved_csv_path=batch_result.unresolved_csv_path,
+        raw_import_map_path=batch_result.raw_import_map_path,
     )
     return batch_result
 
@@ -136,7 +146,9 @@ def _summarize_esr_analysis(analysis) -> dict[str, object]:
         "fit_local_disagreement_flag": analysis.fit_local_disagreement_flag,
         "fit_local_disagreement_reason": analysis.fit_local_disagreement_reason,
         "resonance_metrics_mode_count": len(getattr(analysis, "resonance_metrics", [])),
-        "resonance_metrics_failure_count": sum(1 for item in getattr(analysis, "resonance_metrics", []) if not item.success),
+        "resonance_metrics_failure_count": sum(
+            1 for item in getattr(analysis, "resonance_metrics", []) if not item.success
+        ),
     }
 
 
@@ -188,7 +200,9 @@ def _selected_analyses(
     return [
         successful_analyses[record.source_path.resolve()]
         for record in qc_records
-        if record.accepted_for_plot and record.selected_as_best and record.source_path.resolve() in successful_analyses
+        if record.accepted_for_plot
+        and record.selected_as_best
+        and record.source_path.resolve() in successful_analyses
     ]
 
 

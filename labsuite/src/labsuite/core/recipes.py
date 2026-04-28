@@ -203,8 +203,12 @@ def load_esr_recipe(path: Path) -> EsrPreprocessingRecipe:
         peak_min_pair_width_mT=float(payload.get("peak_min_pair_width_mT", 1.0)),
         split_min_improvement_ratio=float(payload.get("split_min_improvement_ratio", 0.15)),
         integration_baseline_polyorder=int(payload.get("integration_baseline_polyorder", 1)),
-        integration_window_gamma_multiplier=float(payload.get("integration_window_gamma_multiplier", 7.0)),
-        integration_window_min_half_width_mT=float(payload.get("integration_window_min_half_width_mT", 2.0)),
+        integration_window_gamma_multiplier=float(
+            payload.get("integration_window_gamma_multiplier", 7.0)
+        ),
+        integration_window_min_half_width_mT=float(
+            payload.get("integration_window_min_half_width_mT", 2.0)
+        ),
         integration_baseline_window_gamma_multiplier=float(
             payload.get("integration_baseline_window_gamma_multiplier", 14.0)
         ),
@@ -215,10 +219,14 @@ def load_esr_recipe(path: Path) -> EsrPreprocessingRecipe:
             payload.get("integration_detected_window_padding_width_multiplier", 3.0)
         ),
         fit_max_gamma_as_sweep_fraction=float(payload.get("fit_max_gamma_as_sweep_fraction", 0.5)),
-        fit_local_disagreement_ratio_threshold=float(payload.get("fit_local_disagreement_ratio_threshold", 0.35)),
+        fit_local_disagreement_ratio_threshold=float(
+            payload.get("fit_local_disagreement_ratio_threshold", 0.35)
+        ),
         batch_qc_nrmse_max=float(payload.get("batch_qc_nrmse_max", 0.12)),
         batch_qc_edge_guard_min_mT=float(payload.get("batch_qc_edge_guard_min_mT", 2.0)),
-        batch_qc_edge_guard_gamma_multiplier=float(payload.get("batch_qc_edge_guard_gamma_multiplier", 2.0)),
+        batch_qc_edge_guard_gamma_multiplier=float(
+            payload.get("batch_qc_edge_guard_gamma_multiplier", 2.0)
+        ),
     )
     _validate_recipe(recipe)
     return recipe
@@ -232,7 +240,9 @@ def load_vsm_recipe(path: Path) -> VsmPreprocessingRecipe:
         name=str(payload.get("name", "vsm-default")),
         background_tail_fraction=float(payload.get("background_tail_fraction", 0.12)),
         background_min_points_per_side=int(payload.get("background_min_points_per_side", 24)),
-        background_tail_fit_min_r_squared=float(payload.get("background_tail_fit_min_r_squared", 0.6)),
+        background_tail_fit_min_r_squared=float(
+            payload.get("background_tail_fit_min_r_squared", 0.6)
+        ),
         background_tail_fit_catastrophic_r_squared=float(
             payload.get("background_tail_fit_catastrophic_r_squared", 0.2)
         ),
@@ -257,30 +267,48 @@ def load_vsm_recipe(path: Path) -> VsmPreprocessingRecipe:
         background_slope_disagreement_ratio_tolerance=float(
             payload.get("background_slope_disagreement_ratio_tolerance", 0.35)
         ),
-        background_max_flatness_worsening=float(payload.get("background_max_flatness_worsening", 0.02)),
-        background_max_tail_flatness_regression=float(payload.get("background_max_tail_flatness_regression", 0.05)),
+        background_max_flatness_worsening=float(
+            payload.get("background_max_flatness_worsening", 0.02)
+        ),
+        background_max_tail_flatness_regression=float(
+            payload.get("background_max_tail_flatness_regression", 0.05)
+        ),
         background_max_branch_asymmetry_worsening=float(
             payload.get("background_max_branch_asymmetry_worsening", 0.12)
         ),
-        background_max_loop_closure_worsening=float(payload.get("background_max_loop_closure_worsening", 0.08)),
-        background_max_zero_crossing_increase=int(payload.get("background_max_zero_crossing_increase", 0)),
+        background_max_loop_closure_worsening=float(
+            payload.get("background_max_loop_closure_worsening", 0.08)
+        ),
+        background_max_zero_crossing_increase=int(
+            payload.get("background_max_zero_crossing_increase", 0)
+        ),
         background_max_switching_width_relative_change=float(
             payload.get("background_max_switching_width_relative_change", 0.25)
         ),
         background_max_coercive_ambiguity_worsening=int(
             payload.get("background_max_coercive_ambiguity_worsening", 0)
         ),
-        background_min_flatness_gain_score=float(payload.get("background_min_flatness_gain_score", 0.10)),
-        background_min_score_improvement=float(payload.get("background_min_score_improvement", 0.02)),
-        background_score_weight_flatness=float(payload.get("background_score_weight_flatness", 0.45)),
+        background_min_flatness_gain_score=float(
+            payload.get("background_min_flatness_gain_score", 0.10)
+        ),
+        background_min_score_improvement=float(
+            payload.get("background_min_score_improvement", 0.02)
+        ),
+        background_score_weight_flatness=float(
+            payload.get("background_score_weight_flatness", 0.45)
+        ),
         background_score_weight_saturation_consistency=float(
             payload.get("background_score_weight_saturation_consistency", 0.30)
         ),
-        background_score_weight_closure_quality=float(payload.get("background_score_weight_closure_quality", 0.20)),
+        background_score_weight_closure_quality=float(
+            payload.get("background_score_weight_closure_quality", 0.20)
+        ),
         background_score_weight_branch_asymmetry_penalty=float(
             payload.get("background_score_weight_branch_asymmetry_penalty", 0.20)
         ),
-        background_score_weight_flatness_gain=float(payload.get("background_score_weight_flatness_gain", 0.55)),
+        background_score_weight_flatness_gain=float(
+            payload.get("background_score_weight_flatness_gain", 0.55)
+        ),
         background_score_weight_tail_slope_symmetry=float(
             payload.get("background_score_weight_tail_slope_symmetry", 0.20)
         ),
@@ -295,12 +323,20 @@ def load_vsm_recipe(path: Path) -> VsmPreprocessingRecipe:
         smoothing_window=int(payload.get("smoothing_window", 0)),
         smoothing_polyorder=int(payload.get("smoothing_polyorder", 0)),
         uncertainty_scale=float(payload.get("uncertainty_scale", 1.0)),
-        uncertainty_zero_field_window_width_mT=float(payload.get("uncertainty_zero_field_window_width_mT", 5.0)),
+        uncertainty_zero_field_window_width_mT=float(
+            payload.get("uncertainty_zero_field_window_width_mT", 5.0)
+        ),
         uncertainty_zero_field_min_points=int(payload.get("uncertainty_zero_field_min_points", 5)),
-        uncertainty_switching_half_width_mT=float(payload.get("uncertainty_switching_half_width_mT", 3.0)),
+        uncertainty_switching_half_width_mT=float(
+            payload.get("uncertainty_switching_half_width_mT", 3.0)
+        ),
         uncertainty_switching_min_points=int(payload.get("uncertainty_switching_min_points", 4)),
-        uncertainty_loop_area_smoothing_window=int(payload.get("uncertainty_loop_area_smoothing_window", 9)),
-        uncertainty_loop_area_smoothing_polyorder=int(payload.get("uncertainty_loop_area_smoothing_polyorder", 2)),
+        uncertainty_loop_area_smoothing_window=int(
+            payload.get("uncertainty_loop_area_smoothing_window", 9)
+        ),
+        uncertainty_loop_area_smoothing_polyorder=int(
+            payload.get("uncertainty_loop_area_smoothing_polyorder", 2)
+        ),
         uncertainty_min_switching_slope_emu_per_mT=float(
             payload.get("uncertainty_min_switching_slope_emu_per_mT", 1e-7)
         ),
@@ -314,7 +350,9 @@ def load_fmr_recipe(path: Path) -> FmrRecipe:
 
     payload = _load_mapping(path)
     fmr_payload = payload.get("fmr") if isinstance(payload.get("fmr"), dict) else {}
-    kittel_payload = fmr_payload.get("kittel") if isinstance(fmr_payload.get("kittel"), dict) else {}
+    kittel_payload = (
+        fmr_payload.get("kittel") if isinstance(fmr_payload.get("kittel"), dict) else {}
+    )
     field_polarity_payload = _mapping_value(
         payload.get("field_polarity_correction"),
         kittel_payload.get("field_polarity_correction"),
@@ -342,11 +380,15 @@ def load_fmr_recipe(path: Path) -> FmrRecipe:
         candidate_window_padding_width_multiplier=float(
             payload.get("candidate_window_padding_width_multiplier", 1.5)
         ),
-        double_fit_min_improvement_ratio=float(payload.get("double_fit_min_improvement_ratio", 0.15)),
+        double_fit_min_improvement_ratio=float(
+            payload.get("double_fit_min_improvement_ratio", 0.15)
+        ),
         max_resonance_count=int(payload.get("max_resonance_count", 2)),
         field_guard_fraction=float(payload.get("field_guard_fraction", 0.05)),
         linewidth_max_sweep_fraction=float(payload.get("linewidth_max_sweep_fraction", 0.35)),
-        residual_rmse_max_signal_fraction=float(payload.get("residual_rmse_max_signal_fraction", 0.12)),
+        residual_rmse_max_signal_fraction=float(
+            payload.get("residual_rmse_max_signal_fraction", 0.12)
+        ),
         amplitude_snr_min=float(payload.get("amplitude_snr_min", 5.0)),
         shape_center_tolerance_linewidth_fraction=float(
             payload.get("shape_center_tolerance_linewidth_fraction", 0.35)
@@ -380,8 +422,12 @@ def _load_fmr_field_polarity_recipe(payload: Any) -> FmrFieldPolarityCorrectionR
                 ["sample_id", "replicate_id", "frequency", "geometry", "mode_id"],
             )
         ),
-        positive_labels=_string_list(data.get("positive_labels", ["positive", "pos", "plus", "+H"])),
-        negative_labels=_string_list(data.get("negative_labels", ["negative", "neg", "minus", "-H"])),
+        positive_labels=_string_list(
+            data.get("positive_labels", ["positive", "pos", "plus", "+H"])
+        ),
+        negative_labels=_string_list(
+            data.get("negative_labels", ["negative", "neg", "minus", "-H"])
+        ),
         max_pair_frequency_tolerance_ghz=float(data.get("max_pair_frequency_tolerance_ghz", 0.001)),
         max_pair_hres_split_mT=None if max_split in {None, ""} else float(max_split),
         on_unpaired=str(data.get("on_unpaired", "warn_and_keep_raw")),
@@ -509,7 +555,9 @@ def _validate_recipe(recipe: EsrPreprocessingRecipe) -> None:
     if recipe.integration_baseline_window_min_half_width_mT <= 0.0:
         raise RecipeError("integration_baseline_window_min_half_width_mT must be positive")
     if recipe.integration_detected_window_padding_width_multiplier < 0.0:
-        raise RecipeError("integration_detected_window_padding_width_multiplier must be zero or positive")
+        raise RecipeError(
+            "integration_detected_window_padding_width_multiplier must be zero or positive"
+        )
     if not 0.0 < recipe.fit_max_gamma_as_sweep_fraction <= 1.0:
         raise RecipeError("fit_max_gamma_as_sweep_fraction must be between 0 and 1")
     if recipe.fit_local_disagreement_ratio_threshold <= 0.0:
@@ -533,14 +581,21 @@ def _validate_vsm_recipe(recipe: VsmPreprocessingRecipe) -> None:
         raise RecipeError("background_tail_fit_catastrophic_r_squared must be between 0 and 1")
     if recipe.background_tail_fit_catastrophic_r_squared > recipe.background_tail_fit_min_r_squared:
         raise RecipeError(
-            "background_tail_fit_catastrophic_r_squared must be less than or equal to background_tail_fit_min_r_squared"
+            "background_tail_fit_catastrophic_r_squared must be less than or equal to "
+            "background_tail_fit_min_r_squared"
         )
     if not 0.0 <= recipe.background_tail_fit_override_min_flatness_gain_score <= 1.0:
-        raise RecipeError("background_tail_fit_override_min_flatness_gain_score must be between 0 and 1")
+        raise RecipeError(
+            "background_tail_fit_override_min_flatness_gain_score must be between 0 and 1"
+        )
     if not 0.0 <= recipe.background_tail_fit_override_min_flatness_gain_per_tail <= 1.0:
-        raise RecipeError("background_tail_fit_override_min_flatness_gain_per_tail must be between 0 and 1")
+        raise RecipeError(
+            "background_tail_fit_override_min_flatness_gain_per_tail must be between 0 and 1"
+        )
     if not 0.0 <= recipe.background_tail_fit_override_min_gain_balance_score <= 1.0:
-        raise RecipeError("background_tail_fit_override_min_gain_balance_score must be between 0 and 1")
+        raise RecipeError(
+            "background_tail_fit_override_min_gain_balance_score must be between 0 and 1"
+        )
     if not 0.0 <= recipe.background_tail_fit_override_min_switching_integrity_score <= 1.0:
         raise RecipeError(
             "background_tail_fit_override_min_switching_integrity_score must be between 0 and 1"
@@ -576,13 +631,17 @@ def _validate_vsm_recipe(recipe: VsmPreprocessingRecipe) -> None:
     if recipe.background_score_weight_closure_quality < 0.0:
         raise RecipeError("background_score_weight_closure_quality must be zero or positive")
     if recipe.background_score_weight_branch_asymmetry_penalty < 0.0:
-        raise RecipeError("background_score_weight_branch_asymmetry_penalty must be zero or positive")
+        raise RecipeError(
+            "background_score_weight_branch_asymmetry_penalty must be zero or positive"
+        )
     if recipe.background_score_weight_flatness_gain < 0.0:
         raise RecipeError("background_score_weight_flatness_gain must be zero or positive")
     if recipe.background_score_weight_tail_slope_symmetry < 0.0:
         raise RecipeError("background_score_weight_tail_slope_symmetry must be zero or positive")
     if recipe.background_score_weight_saturation_magnitude_symmetry < 0.0:
-        raise RecipeError("background_score_weight_saturation_magnitude_symmetry must be zero or positive")
+        raise RecipeError(
+            "background_score_weight_saturation_magnitude_symmetry must be zero or positive"
+        )
     if recipe.background_score_weight_switching_integrity < 0.0:
         raise RecipeError("background_score_weight_switching_integrity must be zero or positive")
     if recipe.smoothing_window < 0:
@@ -608,9 +667,13 @@ def _validate_vsm_recipe(recipe: VsmPreprocessingRecipe) -> None:
         raise RecipeError("uncertainty_loop_area_smoothing_window must be at least 3")
     if recipe.uncertainty_loop_area_smoothing_polyorder < 1:
         raise RecipeError("uncertainty_loop_area_smoothing_polyorder must be at least 1")
-    if recipe.uncertainty_loop_area_smoothing_polyorder >= recipe.uncertainty_loop_area_smoothing_window:
+    if (
+        recipe.uncertainty_loop_area_smoothing_polyorder
+        >= recipe.uncertainty_loop_area_smoothing_window
+    ):
         raise RecipeError(
-            "uncertainty_loop_area_smoothing_polyorder must be smaller than uncertainty_loop_area_smoothing_window"
+            "uncertainty_loop_area_smoothing_polyorder must be smaller than "
+            "uncertainty_loop_area_smoothing_window"
         )
     if recipe.uncertainty_min_switching_slope_emu_per_mT <= 0.0:
         raise RecipeError("uncertainty_min_switching_slope_emu_per_mT must be positive")
@@ -686,7 +749,9 @@ def _validate_fmr_recipe(recipe: FmrRecipe) -> None:
             "field_polarity_correction.max_pair_frequency_tolerance_ghz must be zero or positive"
         )
     if correction.max_pair_hres_split_mT is not None and correction.max_pair_hres_split_mT < 0.0:
-        raise RecipeError("field_polarity_correction.max_pair_hres_split_mT must be zero or positive")
+        raise RecipeError(
+            "field_polarity_correction.max_pair_hres_split_mT must be zero or positive"
+        )
     if not correction.positive_labels:
         raise RecipeError("field_polarity_correction.positive_labels must not be empty")
     if not correction.negative_labels:

@@ -1,18 +1,14 @@
 from __future__ import annotations
 
-import sys
 from pathlib import Path
 
 import numpy as np
 import pytest
 
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
-SRC_ROOT = PROJECT_ROOT / "src"
-if str(SRC_ROOT) not in sys.path:
-    sys.path.insert(0, str(SRC_ROOT))
-
 from labsuite.plugins.esr.fitters import derivative_lorentzian
 from labsuite.plugins.fmr.fitters import mixed_derivative_lorentzian
+
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
 
 @pytest.fixture
@@ -150,17 +146,27 @@ def build_vsm_loop_arrays():
         increasing_mask = ~decreasing_mask
 
         moment_emu = np.zeros_like(field_mT)
-        moment_emu[increasing_mask] = increasing_scale * ms_emu * np.tanh(
-            (field_mT[increasing_mask] - coercive_field_mT) / transition_width_mT
+        moment_emu[increasing_mask] = (
+            increasing_scale
+            * ms_emu
+            * np.tanh((field_mT[increasing_mask] - coercive_field_mT) / transition_width_mT)
         )
-        moment_emu[decreasing_mask] = decreasing_scale * ms_emu * np.tanh(
-            (field_mT[decreasing_mask] + coercive_field_mT) / transition_width_mT
+        moment_emu[decreasing_mask] = (
+            decreasing_scale
+            * ms_emu
+            * np.tanh((field_mT[decreasing_mask] + coercive_field_mT) / transition_width_mT)
         )
 
         normalized_field = field_mT / max(max_field_mT, 1e-9)
-        positive_tail_component = positive_tail_curvature_emu * np.where(field_mT > 0.0, normalized_field**2, 0.0)
-        negative_tail_component = negative_tail_curvature_emu * np.where(field_mT < 0.0, normalized_field**2, 0.0)
-        deterministic_noise = deterministic_noise_emu * np.sin(np.linspace(0.0, 6.0 * np.pi, field_mT.size))
+        positive_tail_component = positive_tail_curvature_emu * np.where(
+            field_mT > 0.0, normalized_field**2, 0.0
+        )
+        negative_tail_component = negative_tail_curvature_emu * np.where(
+            field_mT < 0.0, normalized_field**2, 0.0
+        )
+        deterministic_noise = deterministic_noise_emu * np.sin(
+            np.linspace(0.0, 6.0 * np.pi, field_mT.size)
+        )
 
         moment_emu = (
             moment_emu
@@ -201,7 +207,8 @@ def write_vsm_sample(build_vsm_loop_arrays):
             "INFO,Synthetic VSM Fixture,APPNAME",
             "BYAPP,VSM,2.0,1.0",
             "[Data]",
-            "Comment,Time Stamp (sec),Temperature (K),Magnetic Field (Oe),Moment (emu),M. Std. Err. (emu)",
+            "Comment,Time Stamp (sec),Temperature (K),Magnetic Field (Oe),"
+            "Moment (emu),M. Std. Err. (emu)",
         ]
         data_lines = []
         for index in range(loop["field_mT"].size):
@@ -266,14 +273,20 @@ def write_phasefmr_log():
         log_path = path if path.suffix.lower() == ".log" else path.with_suffix(".log")
         data_lines: list[str] = []
         sweep_lines: list[str] = [
-            "Frequency(GHz)\tField Saturation (Oe)\tField Start (Oe)\tField Stop (Oe)\tField Step (Oe)\tInput gain\tOutput gain\tModul. Ampl.\tFMR ADC # of Samples\tFMR ADC Rate"
+            "Frequency(GHz)\tField Saturation (Oe)\tField Start (Oe)\t"
+            "Field Stop (Oe)\tField Step (Oe)\tInput gain\tOutput gain\t"
+            "Modul. Ampl.\tFMR ADC # of Samples\tFMR ADC Rate"
         ]
         for frequency in frequencies:
             for polarity in polarities:
                 polarity_label = polarity.strip()
-                polarity_sign = -1.0 if polarity_label.lower() in {"negative", "neg", "minus", "-h"} else 1.0
+                polarity_sign = (
+                    -1.0 if polarity_label.lower() in {"negative", "neg", "minus", "-h"} else 1.0
+                )
                 resonance_mT = polarity_sign * (
-                    25.0 * frequency + resonance_offset_mT + polarity_offsets.get(polarity_label, 0.0)
+                    25.0 * frequency
+                    + resonance_offset_mT
+                    + polarity_offsets.get(polarity_label, 0.0)
                 )
                 lower = resonance_mT - 80.0
                 upper = resonance_mT + 80.0
@@ -295,7 +308,9 @@ def write_phasefmr_log():
                     signal += mixed_derivative_lorentzian(
                         field_mT,
                         H_res_mT=resonance_mT + polarity_sign * secondary_resonance_delta_mT,
-                        DeltaH_mT=linewidth_mT if secondary_linewidth_mT is None else secondary_linewidth_mT,
+                        DeltaH_mT=linewidth_mT
+                        if secondary_linewidth_mT is None
+                        else secondary_linewidth_mT,
                         amplitude_symmetric=35.0 * secondary_amplitude_scale,
                         amplitude_antisymmetric=8.0 * secondary_amplitude_scale,
                         baseline_offset=0.0,
@@ -317,7 +332,9 @@ def write_phasefmr_log():
                     fit_signal += mixed_derivative_lorentzian(
                         field_mT,
                         H_res_mT=resonance_mT + polarity_sign * secondary_resonance_delta_mT,
-                        DeltaH_mT=linewidth_mT if secondary_linewidth_mT is None else secondary_linewidth_mT,
+                        DeltaH_mT=linewidth_mT
+                        if secondary_linewidth_mT is None
+                        else secondary_linewidth_mT,
                         amplitude_symmetric=34.0 * secondary_amplitude_scale,
                         amplitude_antisymmetric=7.5 * secondary_amplitude_scale,
                         baseline_offset=0.0,

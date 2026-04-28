@@ -62,15 +62,27 @@ def test_fmr_recipe_loads_nested_gonzalez_fuentes_measurement_requirements(tmp_p
     )
 
 
-def test_analyze_fmr_file_builds_single_unassigned_series(tmp_path, project_root, write_phasefmr_log) -> None:
-    source_file = write_phasefmr_log(tmp_path / "Temp2-Co-A-2,5to17GHz-R1.log", frequencies_GHz=[4.0, 6.0, 8.0, 10.0])
+def test_analyze_fmr_file_builds_single_unassigned_series(
+    tmp_path, project_root, write_phasefmr_log
+) -> None:
+    source_file = write_phasefmr_log(
+        tmp_path / "Temp2-Co-A-2,5to17GHz-R1.log", frequencies_GHz=[4.0, 6.0, 8.0, 10.0]
+    )
     recipe_path = project_root / "recipes" / "fmr" / "default.yaml"
     result = analyze_fmr_file(source_file, recipe_path)
     assert result.measurement.modality == "fmr"
     assert result.summary_metrics["sample_id"] == "Temp2-Co-A"
     assert "series_collection_result" in result.analysis_payload
-    assert "single_unassigned" in result.analysis_payload["series_collection_result"]["series_by_label"]
-    assert result.analysis_payload["physics_collection_result"]["physics_by_label"]["single_unassigned"]["kittel_fit"]["success"] is True
+    assert (
+        "single_unassigned"
+        in result.analysis_payload["series_collection_result"]["series_by_label"]
+    )
+    assert (
+        result.analysis_payload["physics_collection_result"]["physics_by_label"][
+            "single_unassigned"
+        ]["kittel_fit"]["success"]
+        is True
+    )
     assert all(fit["r_squared"] is not None for fit in result.analysis_payload["trace_fit_results"])
     assert result.provenance["resonance_metrics_config"]["compute_resonance_metrics"] is True
     assert result.analysis_payload["resonance_metrics"]
@@ -92,8 +104,12 @@ def test_gonzalez_fuentes_correction_skips_single_polarity_and_keeps_raw_kittel(
 
     assert result.summary_metrics["kittel_success"] is True
     assert GONZALEZ_FUENTES_SINGLE_POLARITY_WARNING in result.warnings
-    assert result.summary_metrics["field_polarity_correction_statuses"] == ["skipped_single_polarity"]
-    series = result.analysis_payload["series_collection_result"]["series_by_label"]["single_unassigned"]
+    assert result.summary_metrics["field_polarity_correction_statuses"] == [
+        "skipped_single_polarity"
+    ]
+    series = result.analysis_payload["series_collection_result"]["series_by_label"][
+        "single_unassigned"
+    ]
     assert all(point["Hres_avg_mT"] is None for point in series["metadata"]["polarity_points"])
     assert series["metadata"]["field_polarity_correction"]["fit_field"] == "Hres"
 
@@ -112,7 +128,9 @@ def test_gonzalez_fuentes_correction_uses_paired_average_for_kittel(
 
     result = analyze_fmr_file(source_file, recipe_path)
 
-    series = result.analysis_payload["series_collection_result"]["series_by_label"]["single_unassigned"]
+    series = result.analysis_payload["series_collection_result"]["series_by_label"][
+        "single_unassigned"
+    ]
     paired_points = [
         point
         for point in series["metadata"]["polarity_points"]
@@ -123,7 +141,9 @@ def test_gonzalez_fuentes_correction_uses_paired_average_for_kittel(
     assert result.summary_metrics["field_polarity_correction_statuses"] == ["applied"]
     assert all(point["Hres_avg_mT"] is not None for point in paired_points)
     assert series["resonance_field_mT"] == [point["Hres_avg_mT"] for point in paired_points]
-    physics = result.analysis_payload["physics_collection_result"]["physics_by_label"]["single_unassigned"]
+    physics = result.analysis_payload["physics_collection_result"]["physics_by_label"][
+        "single_unassigned"
+    ]
     assert physics["kittel_fit"]["success"] is True
     assert "corrected" in physics["metadata"]["polarity_comparison_fits"]
 
@@ -156,8 +176,15 @@ def test_gonzalez_fuentes_correction_keeps_modes_separate_for_double_traces(
         )
 
 
-def test_analyze_fmr_file_builds_mode_1_and_mode_2_series_for_double_traces(tmp_path, project_root, write_phasefmr_log) -> None:
-    source_file = write_phasefmr_log(tmp_path / "MTJ-A-03APR2026-R1.log", frequencies_GHz=[8.0, 9.0, 10.0, 11.0], secondary_resonance_delta_mT=52.0, secondary_linewidth_mT=9.0)
+def test_analyze_fmr_file_builds_mode_1_and_mode_2_series_for_double_traces(
+    tmp_path, project_root, write_phasefmr_log
+) -> None:
+    source_file = write_phasefmr_log(
+        tmp_path / "MTJ-A-03APR2026-R1.log",
+        frequencies_GHz=[8.0, 9.0, 10.0, 11.0],
+        secondary_resonance_delta_mT=52.0,
+        secondary_linewidth_mT=9.0,
+    )
     recipe_path = project_root / "recipes" / "fmr" / "default.yaml"
     result = analyze_fmr_file(source_file, recipe_path)
     series_labels = result.analysis_payload["series_collection_result"]["series_by_label"].keys()
@@ -167,20 +194,36 @@ def test_analyze_fmr_file_builds_mode_1_and_mode_2_series_for_double_traces(tmp_
     assert result.summary_metrics["mode_counts"]["double"] >= 1
 
 
-def test_analyze_fmr_file_handles_single_trace_without_crashing_physics(tmp_path, project_root, write_phasefmr_log) -> None:
-    source_file = write_phasefmr_log(tmp_path / "NiFeStd1-03APR2026-R1.log", frequencies_GHz=[9.459], include_temp=True, temperature_K=122.2)
+def test_analyze_fmr_file_handles_single_trace_without_crashing_physics(
+    tmp_path, project_root, write_phasefmr_log
+) -> None:
+    source_file = write_phasefmr_log(
+        tmp_path / "NiFeStd1-03APR2026-R1.log",
+        frequencies_GHz=[9.459],
+        include_temp=True,
+        temperature_K=122.2,
+    )
     recipe_path = project_root / "recipes" / "fmr" / "default.yaml"
     result = analyze_fmr_file(source_file, recipe_path)
     assert result.summary_metrics["trace_count"] == 1
     assert result.summary_metrics["has_multiple_frequencies"] is False
     assert result.summary_metrics["kittel_success"] is False
     assert result.summary_metrics["linewidth_success"] is False
-    warnings = result.analysis_payload["physics_collection_result"]["physics_by_label"]["single_unassigned"]["warnings"]
+    warnings = result.analysis_payload["physics_collection_result"]["physics_by_label"][
+        "single_unassigned"
+    ]["warnings"]
     assert any("insufficient_points" in warning for warning in warnings)
 
 
-def test_analyze_fmr_file_preserves_rejected_or_partial_components(tmp_path, project_root, write_phasefmr_log) -> None:
-    source_file = write_phasefmr_log(tmp_path / "MTJ-A-03APR2026-R1.log", frequencies_GHz=[9.0], secondary_resonance_delta_mT=52.0, secondary_linewidth_mT=250.0)
+def test_analyze_fmr_file_preserves_rejected_or_partial_components(
+    tmp_path, project_root, write_phasefmr_log
+) -> None:
+    source_file = write_phasefmr_log(
+        tmp_path / "MTJ-A-03APR2026-R1.log",
+        frequencies_GHz=[9.0],
+        secondary_resonance_delta_mT=52.0,
+        secondary_linewidth_mT=250.0,
+    )
     recipe_path = project_root / "recipes" / "fmr" / "default.yaml"
     result = analyze_fmr_file(source_file, recipe_path)
     fits = result.analysis_payload["trace_fit_results"]
@@ -189,8 +232,12 @@ def test_analyze_fmr_file_preserves_rejected_or_partial_components(tmp_path, pro
     assert fits[0]["selected_components"]
 
 
-def test_trace_diagnostics_annotate_r_squared(tmp_path, project_root, write_phasefmr_log, monkeypatch) -> None:
-    source_file = write_phasefmr_log(tmp_path / "Temp2-Co-A-2,5to17GHz-R1.log", frequencies_GHz=[8.0, 10.0])
+def test_trace_diagnostics_annotate_r_squared(
+    tmp_path, project_root, write_phasefmr_log, monkeypatch
+) -> None:
+    source_file = write_phasefmr_log(
+        tmp_path / "Temp2-Co-A-2,5to17GHz-R1.log", frequencies_GHz=[8.0, 10.0]
+    )
     recipe_path = project_root / "recipes" / "fmr" / "default.yaml"
     result = analyze_fmr_file(source_file, recipe_path)
 
@@ -209,8 +256,12 @@ def test_trace_diagnostics_annotate_r_squared(tmp_path, project_root, write_phas
     assert any("R^2 =" in item for item in captured)
 
 
-def test_trace_diagnostics_include_absorption_subplot(tmp_path, project_root, write_phasefmr_log, monkeypatch) -> None:
-    source_file = write_phasefmr_log(tmp_path / "Temp2-Co-A-2,5to17GHz-R1.log", frequencies_GHz=[8.0, 10.0])
+def test_trace_diagnostics_include_absorption_subplot(
+    tmp_path, project_root, write_phasefmr_log, monkeypatch
+) -> None:
+    source_file = write_phasefmr_log(
+        tmp_path / "Temp2-Co-A-2,5to17GHz-R1.log", frequencies_GHz=[8.0, 10.0]
+    )
     recipe_path = project_root / "recipes" / "fmr" / "default.yaml"
     result = analyze_fmr_file(source_file, recipe_path)
 
@@ -232,7 +283,9 @@ def test_trace_diagnostics_include_absorption_subplot(tmp_path, project_root, wr
     assert all(count == 3 for count in saved_axes_counts)
 
 
-def test_trace_diagnostics_label_hres_markers_and_drop_candidate_center_lines(tmp_path, project_root, write_phasefmr_log, monkeypatch) -> None:
+def test_trace_diagnostics_label_hres_markers_and_drop_candidate_center_lines(
+    tmp_path, project_root, write_phasefmr_log, monkeypatch
+) -> None:
     source_file = write_phasefmr_log(
         tmp_path / "MTJ-A-03APR2026-R1.log",
         frequencies_GHz=[8.0, 10.0],
@@ -272,4 +325,6 @@ def test_trace_diagnostics_label_hres_markers_and_drop_candidate_center_lines(tm
     assert captured
     assert all(call["linestyle"] != ":" for call in captured)
     assert expected_labels <= {call["label"] for call in captured if call["label"] is not None}
-    assert expected_positions <= {call["x"] for call in captured if call["label"] in expected_labels}
+    assert expected_positions <= {
+        call["x"] for call in captured if call["label"] in expected_labels
+    }

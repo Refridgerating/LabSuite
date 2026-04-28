@@ -5,7 +5,9 @@ import json
 from labsuite.cli.main import main
 
 
-def test_esr_single_file_cli_exports_all_artifacts(tmp_path, project_root, write_bruker_esr_sample) -> None:
+def test_esr_single_file_cli_exports_all_artifacts(
+    tmp_path, project_root, write_bruker_esr_sample
+) -> None:
     source_file = write_bruker_esr_sample(tmp_path / "workflow_trace.dsc")
     output_dir = tmp_path / "artifacts"
     recipe_path = project_root / "recipes" / "esr" / "default.yaml"
@@ -46,14 +48,28 @@ def test_esr_single_file_cli_exports_all_artifacts(tmp_path, project_root, write
     assert "local_integrated_curves" in payload
     assert "baseline_summaries" in payload
     assert payload["primary_integrated_curves"]["integration_kind"] == "primary_fit_model"
-    assert payload["fit_local_integrated_curves"] is None or payload["fit_local_integrated_curves"]["integration_kind"] == "fit_local_windowed_model"
-    assert payload["local_integrated_curves"] is None or payload["local_integrated_curves"]["integration_kind"] == "primary_local_window"
+    assert (
+        payload["fit_local_integrated_curves"] is None
+        or payload["fit_local_integrated_curves"]["integration_kind"] == "fit_local_windowed_model"
+    )
+    assert (
+        payload["local_integrated_curves"] is None
+        or payload["local_integrated_curves"]["integration_kind"] == "primary_local_window"
+    )
     assert payload["integrated_curves"]["integration_kind"] == "diagnostic_full_span"
     assert payload["integral_summaries"]["total"]["label"] == "total"
     assert payload["integral_summaries"]["total"]["integration_kind"] == "primary_fit_model"
-    assert payload["integral_summaries"]["fit_local_total"]["integration_kind"] == "fit_local_windowed_model"
-    assert payload["integral_summaries"]["local_total"]["integration_kind"] == "primary_local_window"
-    assert payload["integral_summaries"]["diagnostic_total"]["integration_kind"] == "diagnostic_full_span"
+    assert (
+        payload["integral_summaries"]["fit_local_total"]["integration_kind"]
+        == "fit_local_windowed_model"
+    )
+    assert (
+        payload["integral_summaries"]["local_total"]["integration_kind"] == "primary_local_window"
+    )
+    assert (
+        payload["integral_summaries"]["diagnostic_total"]["integration_kind"]
+        == "diagnostic_full_span"
+    )
     assert "qc" in payload
     assert payload["resonance_metrics"]["config"]["compute_resonance_metrics"] is True
     assert len(payload["resonance_metrics"]["modes"]) == 1
@@ -63,8 +79,13 @@ def test_esr_single_file_cli_exports_all_artifacts(tmp_path, project_root, write
     assert payload["fit_selection"]["single_fit_attempts"][0]["scope"] == "global_full_trace"
     assert payload["fit_selection"]["single_fit_attempts"][0]["selected_for_primary"] is True
     assert payload["fit_selection"]["single_fit"]["residual_summary"]["rmse"] >= 0.0
-    assert payload["fit_selection"]["single_fit"]["feature_summary"]["zero_crossing_field_mT"] is not None
-    assert payload["fit_selection"]["single_fit"]["parameter_diagnostics"]["center_mT"]["stderr_missing"] in {True, False}
+    assert (
+        payload["fit_selection"]["single_fit"]["feature_summary"]["zero_crossing_field_mT"]
+        is not None
+    )
+    assert payload["fit_selection"]["single_fit"]["parameter_diagnostics"]["center_mT"][
+        "stderr_missing"
+    ] in {True, False}
     assert payload["fit_selection"]["single_fit"]["convergence"]["success"] is True
 
     header = csv_path.read_text(encoding="utf-8").splitlines()[0]
@@ -96,7 +117,9 @@ def test_esr_single_file_cli_exports_all_artifacts(tmp_path, project_root, write
     assert "asymmetry_ratio" in summary_header
 
 
-def test_esr_single_file_cli_forced_split_exports_components(tmp_path, project_root, write_bruker_esr_sample) -> None:
+def test_esr_single_file_cli_forced_split_exports_components(
+    tmp_path, project_root, write_bruker_esr_sample
+) -> None:
     source_file = write_bruker_esr_sample(
         tmp_path / "split_trace.dsc",
         components=[
@@ -125,22 +148,35 @@ def test_esr_single_file_cli_forced_split_exports_components(tmp_path, project_r
     assert payload["fit_selection"]["selected_mode"] == "split"
     assert len(payload["fit_selection"]["peak_fits"]) == 2
     assert payload["primary_integrated_curves"]["integration_kind"] == "primary_fit_model"
-    assert payload["fit_local_integrated_curves"] is None or payload["fit_local_integrated_curves"]["integration_kind"] == "fit_local_windowed_model"
-    assert payload["local_integrated_curves"] is None or payload["local_integrated_curves"]["integration_kind"] == "primary_local_window"
-    assert payload["fit_selection"]["peak_fits"][0]["fit"]["feature_summary"]["zero_crossing_field_mT"] is not None
+    assert (
+        payload["fit_local_integrated_curves"] is None
+        or payload["fit_local_integrated_curves"]["integration_kind"] == "fit_local_windowed_model"
+    )
+    assert (
+        payload["local_integrated_curves"] is None
+        or payload["local_integrated_curves"]["integration_kind"] == "primary_local_window"
+    )
+    assert (
+        payload["fit_selection"]["peak_fits"][0]["fit"]["feature_summary"]["zero_crossing_field_mT"]
+        is not None
+    )
     assert payload["fit_selection"]["peak_fits"][0]["fit"]["convergence"]["success"] is True
     assert payload["fit_selection"]["peak_fits"][0]["attempts"][0]["scope"] == "peak_window_local"
     assert payload["fit_selection"]["peak_fits"][0]["attempts"][0]["selected_for_primary"] is True
     header = (output_dir / "split_trace_trace.csv").read_text(encoding="utf-8").splitlines()[0]
     assert "peak_1_component_signal" in header
     assert "peak_2_component_signal" in header
-    summary_header = (output_dir / "split_trace_summary.csv").read_text(encoding="utf-8").splitlines()[0]
+    summary_header = (
+        (output_dir / "split_trace_summary.csv").read_text(encoding="utf-8").splitlines()[0]
+    )
     assert "window_peak_field_mT" in summary_header
     assert "gamma_mT_relative_stderr" in summary_header
     assert "fit_scope" in summary_header
 
 
-def test_esr_single_file_cli_exports_split_local_suppression_reason(tmp_path, project_root, write_bruker_esr_sample) -> None:
+def test_esr_single_file_cli_exports_split_local_suppression_reason(
+    tmp_path, project_root, write_bruker_esr_sample
+) -> None:
     source_file = write_bruker_esr_sample(
         tmp_path / "edge_split_trace.dsc",
         components=[
@@ -165,7 +201,9 @@ def test_esr_single_file_cli_exports_split_local_suppression_reason(tmp_path, pr
     )
 
     assert exit_code == 0
-    payload = json.loads((output_dir / "edge_split_trace_analysis.json").read_text(encoding="utf-8"))
+    payload = json.loads(
+        (output_dir / "edge_split_trace_analysis.json").read_text(encoding="utf-8")
+    )
     assert payload["fit_selection"]["selected_mode"] == "split"
     assert payload["fit_local_integrated_curves"] is None
     assert payload["local_integrated_curves"] is None
@@ -179,7 +217,9 @@ def test_esr_single_file_cli_exports_split_local_suppression_reason(tmp_path, pr
     )
 
 
-def test_esr_single_file_cli_runs_on_actual_bruker_dataset(tmp_path, project_root, bruker_sample_stem) -> None:
+def test_esr_single_file_cli_runs_on_actual_bruker_dataset(
+    tmp_path, project_root, bruker_sample_stem
+) -> None:
     output_dir = tmp_path / "bruker_artifacts"
     recipe_path = project_root / "recipes" / "esr" / "default.yaml"
     source_file = bruker_sample_stem.with_suffix(".dsc")
@@ -200,5 +240,7 @@ def test_esr_single_file_cli_runs_on_actual_bruker_dataset(tmp_path, project_roo
     assert (output_dir / f"{source_file.stem}_trace.csv").exists()
     assert (output_dir / f"{source_file.stem}_summary.csv").exists()
     assert (output_dir / f"{source_file.stem}_figure.png").exists()
-    payload = json.loads((output_dir / f"{source_file.stem}_analysis.json").read_text(encoding="utf-8"))
+    payload = json.loads(
+        (output_dir / f"{source_file.stem}_analysis.json").read_text(encoding="utf-8")
+    )
     assert payload["fit_selection"]["selected_mode"] == "split"

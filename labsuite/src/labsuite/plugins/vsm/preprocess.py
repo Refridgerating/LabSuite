@@ -145,16 +145,18 @@ def fit_background_slope(
     )
     positive_fit = selection_details["positive_fit"]
     negative_fit = selection_details["negative_fit"]
-    positive_indices, negative_indices, positive_fit, negative_fit, rescue_metadata = _apply_soft_warning_tail_window_rescue(
-        field_mT=field_mT,
-        moment_emu=moment_emu,
-        moment_std_err_emu=moment_std_err_emu,
-        positive_indices=positive_indices,
-        negative_indices=negative_indices,
-        positive_fit=positive_fit,
-        negative_fit=negative_fit,
-        selection_details=selection_details,
-        recipe=recipe,
+    positive_indices, negative_indices, positive_fit, negative_fit, rescue_metadata = (
+        _apply_soft_warning_tail_window_rescue(
+            field_mT=field_mT,
+            moment_emu=moment_emu,
+            moment_std_err_emu=moment_std_err_emu,
+            positive_indices=positive_indices,
+            negative_indices=negative_indices,
+            positive_fit=positive_fit,
+            negative_fit=negative_fit,
+            selection_details=selection_details,
+            recipe=recipe,
+        )
     )
     selection_details["tail_window_metadata"].update(rescue_metadata)
 
@@ -208,9 +210,15 @@ def fit_background_slope(
             "selected_positive_indices": [int(index) for index in positive_indices],
             "selected_negative_indices": [int(index) for index in negative_indices],
             **selection_details["tail_window_metadata"],
-            "background_tail_flatness_ratio_tolerance": recipe.background_tail_flatness_ratio_tolerance,
-            "positive_tail_flatness_ratio_tolerance": recipe.background_tail_flatness_ratio_tolerance,
-            "raw_tail_slope_disagreement_ratio_tolerance": recipe.background_slope_disagreement_ratio_tolerance,
+            "background_tail_flatness_ratio_tolerance": (
+                recipe.background_tail_flatness_ratio_tolerance
+            ),
+            "positive_tail_flatness_ratio_tolerance": (
+                recipe.background_tail_flatness_ratio_tolerance
+            ),
+            "raw_tail_slope_disagreement_ratio_tolerance": (
+                recipe.background_slope_disagreement_ratio_tolerance
+            ),
             "background_mode": background_mode,
             "subtraction_mode": background_mode,
             "used_intercept_in_correction": False,
@@ -287,39 +295,72 @@ def select_tail_indices(
     if np.any(field_mT[negative_indices] >= 0.0):
         warnings.append("negative_tail_contains_non_negative_fields")
 
-    return positive_indices, negative_indices, {
-        "positive_fit": positive_fit,
-        "negative_fit": negative_fit,
-        "positive_candidate_windows": _build_tail_window_candidates(
-            field_mT=field_mT,
-            ordered_indices=positive_initial_indices,
-            minimum_count=min(recipe.background_min_points_per_side, positive_initial_indices.size),
-        ),
-        "negative_candidate_windows": _build_tail_window_candidates(
-            field_mT=field_mT,
-            ordered_indices=negative_initial_indices,
-            minimum_count=min(recipe.background_min_points_per_side, negative_initial_indices.size),
-        ),
-        "tail_window_metadata": {
-            "tail_window_selection_mode": "iterative_shrink",
-            "positive_tail_window_initial_point_count": positive_selection["initial_point_count"],
-            "negative_tail_window_initial_point_count": negative_selection["initial_point_count"],
-            "positive_tail_window_selected_point_count": positive_selection["selected_point_count"],
-            "negative_tail_window_selected_point_count": negative_selection["selected_point_count"],
-            "positive_tail_window_initial_field_min_mT": positive_selection["initial_field_min_mT"],
-            "positive_tail_window_initial_field_max_mT": positive_selection["initial_field_max_mT"],
-            "negative_tail_window_initial_field_min_mT": negative_selection["initial_field_min_mT"],
-            "negative_tail_window_initial_field_max_mT": negative_selection["initial_field_max_mT"],
-            "positive_tail_window_selected_field_min_mT": positive_selection["selected_field_min_mT"],
-            "positive_tail_window_selected_field_max_mT": positive_selection["selected_field_max_mT"],
-            "negative_tail_window_selected_field_min_mT": negative_selection["selected_field_min_mT"],
-            "negative_tail_window_selected_field_max_mT": negative_selection["selected_field_max_mT"],
-            "positive_tail_window_soft_r_squared_rescue_attempted": False,
-            "negative_tail_window_soft_r_squared_rescue_attempted": False,
-            "positive_tail_window_rescue_changed_selection": False,
-            "negative_tail_window_rescue_changed_selection": False,
+    return (
+        positive_indices,
+        negative_indices,
+        {
+            "positive_fit": positive_fit,
+            "negative_fit": negative_fit,
+            "positive_candidate_windows": _build_tail_window_candidates(
+                field_mT=field_mT,
+                ordered_indices=positive_initial_indices,
+                minimum_count=min(
+                    recipe.background_min_points_per_side, positive_initial_indices.size
+                ),
+            ),
+            "negative_candidate_windows": _build_tail_window_candidates(
+                field_mT=field_mT,
+                ordered_indices=negative_initial_indices,
+                minimum_count=min(
+                    recipe.background_min_points_per_side, negative_initial_indices.size
+                ),
+            ),
+            "tail_window_metadata": {
+                "tail_window_selection_mode": "iterative_shrink",
+                "positive_tail_window_initial_point_count": positive_selection[
+                    "initial_point_count"
+                ],
+                "negative_tail_window_initial_point_count": negative_selection[
+                    "initial_point_count"
+                ],
+                "positive_tail_window_selected_point_count": positive_selection[
+                    "selected_point_count"
+                ],
+                "negative_tail_window_selected_point_count": negative_selection[
+                    "selected_point_count"
+                ],
+                "positive_tail_window_initial_field_min_mT": positive_selection[
+                    "initial_field_min_mT"
+                ],
+                "positive_tail_window_initial_field_max_mT": positive_selection[
+                    "initial_field_max_mT"
+                ],
+                "negative_tail_window_initial_field_min_mT": negative_selection[
+                    "initial_field_min_mT"
+                ],
+                "negative_tail_window_initial_field_max_mT": negative_selection[
+                    "initial_field_max_mT"
+                ],
+                "positive_tail_window_selected_field_min_mT": positive_selection[
+                    "selected_field_min_mT"
+                ],
+                "positive_tail_window_selected_field_max_mT": positive_selection[
+                    "selected_field_max_mT"
+                ],
+                "negative_tail_window_selected_field_min_mT": negative_selection[
+                    "selected_field_min_mT"
+                ],
+                "negative_tail_window_selected_field_max_mT": negative_selection[
+                    "selected_field_max_mT"
+                ],
+                "positive_tail_window_soft_r_squared_rescue_attempted": False,
+                "negative_tail_window_soft_r_squared_rescue_attempted": False,
+                "positive_tail_window_rescue_changed_selection": False,
+                "negative_tail_window_rescue_changed_selection": False,
+            },
         },
-    }, warnings
+        warnings,
+    )
 
 
 def _initial_tail_indices(
@@ -364,7 +405,11 @@ def _select_adaptive_tail_window(
             recipe=recipe,
             label=label,
         )
-        return ordered_indices, fit, _build_tail_window_metadata(ordered_indices, ordered_indices, field_mT)
+        return (
+            ordered_indices,
+            fit,
+            _build_tail_window_metadata(ordered_indices, ordered_indices, field_mT),
+        )
 
     minimum_count = min(recipe.background_min_points_per_side, ordered_indices.size)
     candidate_windows = _build_tail_window_candidates(
@@ -386,7 +431,9 @@ def _select_adaptive_tail_window(
         )
         candidate_rank = (
             _fit_r_squared_value(candidate_fit),
-            -_normalized_tail_slope_magnitude(candidate_fit, field_mT, moment_emu, candidate_indices),
+            -_normalized_tail_slope_magnitude(
+                candidate_fit, field_mT, moment_emu, candidate_indices
+            ),
             int(candidate_indices.size),
         )
         if best_rank is None or candidate_rank > best_rank:
@@ -399,7 +446,11 @@ def _select_adaptive_tail_window(
         best_indices = np.asarray(best_indices[field_mT[best_indices] > 0.0], dtype=int)
     else:
         best_indices = np.asarray(best_indices[field_mT[best_indices] < 0.0], dtype=int)
-    return best_indices, best_fit, _build_tail_window_metadata(ordered_indices, best_indices, field_mT)
+    return (
+        best_indices,
+        best_fit,
+        _build_tail_window_metadata(ordered_indices, best_indices, field_mT),
+    )
 
 
 def _build_tail_window_candidates(
@@ -472,8 +523,12 @@ def _apply_soft_warning_tail_window_rescue(
         negative_fit = rescued_fit
     rescue_metadata.update(
         {
-            "positive_tail_window_selected_point_count": int(np.asarray(positive_indices, dtype=int).size),
-            "negative_tail_window_selected_point_count": int(np.asarray(negative_indices, dtype=int).size),
+            "positive_tail_window_selected_point_count": int(
+                np.asarray(positive_indices, dtype=int).size
+            ),
+            "negative_tail_window_selected_point_count": int(
+                np.asarray(negative_indices, dtype=int).size
+            ),
             "positive_tail_window_selected_field_min_mT": float(np.min(field_mT[positive_indices]))
             if np.asarray(positive_indices, dtype=int).size
             else None,
@@ -518,7 +573,9 @@ def _select_soft_warning_tail_window(
             candidate_fit.parameters.get("slope_emu_per_mT"),
             other_fit.parameters.get("slope_emu_per_mT"),
         )
-        candidate_corrected_moment = np.asarray(moment_emu - candidate_applied_slope * field_mT, dtype=float)
+        candidate_corrected_moment = np.asarray(
+            moment_emu - candidate_applied_slope * field_mT, dtype=float
+        )
         candidate_gain = _candidate_tail_flatness_gain(
             field_mT=field_mT,
             raw_moment_emu=moment_emu,
@@ -567,7 +624,9 @@ def _candidate_tail_flatness_gain(
         label=f"{label}_corrected_eval",
     )
     raw_normalized = _normalized_tail_slope_magnitude(raw_fit, field_mT, raw_moment_emu, indices)
-    corrected_normalized = _normalized_tail_slope_magnitude(corrected_fit, field_mT, corrected_moment_emu, indices)
+    corrected_normalized = _normalized_tail_slope_magnitude(
+        corrected_fit, field_mT, corrected_moment_emu, indices
+    )
     return _flatness_gain(raw_normalized, corrected_normalized)
 
 
@@ -576,9 +635,15 @@ def _build_tail_window_metadata(
     selected_indices: np.ndarray,
     field_mT: np.ndarray,
 ) -> dict[str, float | int | None]:
-    initial_fields = np.asarray(field_mT[initial_indices], dtype=float) if initial_indices.size else np.asarray([], dtype=float)
+    initial_fields = (
+        np.asarray(field_mT[initial_indices], dtype=float)
+        if initial_indices.size
+        else np.asarray([], dtype=float)
+    )
     selected_fields = (
-        np.asarray(field_mT[selected_indices], dtype=float) if selected_indices.size else np.asarray([], dtype=float)
+        np.asarray(field_mT[selected_indices], dtype=float)
+        if selected_indices.size
+        else np.asarray([], dtype=float)
     )
     return {
         "initial_point_count": int(initial_indices.size),
@@ -612,7 +677,9 @@ def _normalized_tail_slope_magnitude(
     x_selected = np.asarray(field_mT[indices], dtype=float)
     y_selected = np.asarray(moment_emu[indices], dtype=float)
     slope = float(fit.parameters.get("slope_emu_per_mT", 0.0))
-    scale = max(float(np.mean(np.abs(y_selected))) / max(float(np.max(np.abs(x_selected))), 1e-18), 1e-18)
+    scale = max(
+        float(np.mean(np.abs(y_selected))) / max(float(np.max(np.abs(x_selected))), 1e-18), 1e-18
+    )
     return float(abs(slope) / scale)
 
 
@@ -678,7 +745,9 @@ def _fit_tail_line(
     )
 
 
-def _build_fit_weights(moment_std_err_emu: np.ndarray, recipe: VsmPreprocessingRecipe) -> np.ndarray | None:
+def _build_fit_weights(
+    moment_std_err_emu: np.ndarray, recipe: VsmPreprocessingRecipe
+) -> np.ndarray | None:
     finite_std_err = np.asarray(moment_std_err_emu, dtype=float)
     valid_weights = np.isfinite(finite_std_err) & (finite_std_err > 0.0)
     if not np.any(valid_weights):
@@ -760,7 +829,8 @@ def _evaluate_background_mode(
         corrected_metrics.get("switching_width_mT"),
     )
     zero_crossing_candidate_increase = int(
-        corrected_metrics["zero_crossing_candidate_count"] - raw_metrics["zero_crossing_candidate_count"]
+        corrected_metrics["zero_crossing_candidate_count"]
+        - raw_metrics["zero_crossing_candidate_count"]
     )
     coercive_ambiguity_worsening = int(
         corrected_metrics["coercive_ambiguity_count"] - raw_metrics["coercive_ambiguity_count"]
@@ -802,14 +872,18 @@ def _evaluate_background_mode(
     )
 
     decision_checks = {
-        "meaningful_slope": bool(abs(applied_slope) >= recipe.background_min_meaningful_slope_emu_per_mT),
+        "meaningful_slope": bool(
+            abs(applied_slope) >= recipe.background_min_meaningful_slope_emu_per_mT
+        ),
         "positive_tail_fit_success": bool(positive_fit.success),
         "negative_tail_fit_success": bool(negative_fit.success),
         "positive_tail_fit_r_squared_soft_ok": bool(
-            positive_fit_r_squared is not None and positive_fit_r_squared >= recipe.background_tail_fit_min_r_squared
+            positive_fit_r_squared is not None
+            and positive_fit_r_squared >= recipe.background_tail_fit_min_r_squared
         ),
         "negative_tail_fit_r_squared_soft_ok": bool(
-            negative_fit_r_squared is not None and negative_fit_r_squared >= recipe.background_tail_fit_min_r_squared
+            negative_fit_r_squared is not None
+            and negative_fit_r_squared >= recipe.background_tail_fit_min_r_squared
         ),
         "positive_tail_fit_r_squared_catastrophic_ok": bool(
             positive_fit_r_squared is not None
@@ -823,36 +897,44 @@ def _evaluate_background_mode(
             raw_slope_disagreement_ratio <= recipe.background_slope_disagreement_ratio_tolerance
         ),
         "positive_tail_flatness_regression_ok": bool(
-            float(corrected_metrics["plateau_slope_positive_normalized"]) - float(raw_metrics["plateau_slope_positive_normalized"])
+            float(corrected_metrics["plateau_slope_positive_normalized"])
+            - float(raw_metrics["plateau_slope_positive_normalized"])
             <= recipe.background_max_tail_flatness_regression
         ),
         "negative_tail_flatness_regression_ok": bool(
-            float(corrected_metrics["plateau_slope_negative_normalized"]) - float(raw_metrics["plateau_slope_negative_normalized"])
+            float(corrected_metrics["plateau_slope_negative_normalized"])
+            - float(raw_metrics["plateau_slope_negative_normalized"])
             <= recipe.background_max_tail_flatness_regression
         ),
-        "flatness_gain_score_ok": bool(flatness_gain_score >= recipe.background_min_flatness_gain_score),
+        "flatness_gain_score_ok": bool(
+            flatness_gain_score >= recipe.background_min_flatness_gain_score
+        ),
         "positive_tail_flatness_gain_override_ok": bool(
-            np.clip(positive_flatness_gain, 0.0, 1.0) >= recipe.background_tail_fit_override_min_flatness_gain_per_tail
+            np.clip(positive_flatness_gain, 0.0, 1.0)
+            >= recipe.background_tail_fit_override_min_flatness_gain_per_tail
         ),
         "negative_tail_flatness_gain_override_ok": bool(
-            np.clip(negative_flatness_gain, 0.0, 1.0) >= recipe.background_tail_fit_override_min_flatness_gain_per_tail
+            np.clip(negative_flatness_gain, 0.0, 1.0)
+            >= recipe.background_tail_fit_override_min_flatness_gain_per_tail
         ),
         "flatness_gain_balance_ok": bool(
-            flatness_gain_balance_score >= recipe.background_tail_fit_override_min_gain_balance_score
+            flatness_gain_balance_score
+            >= recipe.background_tail_fit_override_min_gain_balance_score
         ),
         "corrected_zero_crossing_increase_ok": bool(
             zero_crossing_candidate_increase <= recipe.background_max_zero_crossing_increase
         ),
         "corrected_switching_width_available_or_not_needed": bool(
-            raw_metrics.get("switching_width_mT") is None or corrected_metrics.get("switching_width_mT") is not None
+            raw_metrics.get("switching_width_mT") is None
+            or corrected_metrics.get("switching_width_mT") is not None
         ),
         "corrected_switching_width_change_ok": bool(
             switching_width_relative_change is not None
-            and switching_width_relative_change <= recipe.background_max_switching_width_relative_change
+            and switching_width_relative_change
+            <= recipe.background_max_switching_width_relative_change
         ),
         "corrected_coercive_ambiguity_worsening_ok": bool(
-            coercive_ambiguity_worsening
-            <= recipe.background_max_coercive_ambiguity_worsening
+            coercive_ambiguity_worsening <= recipe.background_max_coercive_ambiguity_worsening
         ),
         "score_improved": bool(score_delta >= recipe.background_min_score_improvement),
         "soft_tail_fit_r_squared_override_flatness_gain_ok": bool(
@@ -865,20 +947,34 @@ def _evaluate_background_mode(
     }
     positive_tail_fit_r_squared_soft_warning = bool(
         positive_fit_r_squared is not None
-        and recipe.background_tail_fit_catastrophic_r_squared <= positive_fit_r_squared < recipe.background_tail_fit_min_r_squared
+        and recipe.background_tail_fit_catastrophic_r_squared
+        <= positive_fit_r_squared
+        < recipe.background_tail_fit_min_r_squared
     )
     negative_tail_fit_r_squared_soft_warning = bool(
         negative_fit_r_squared is not None
-        and recipe.background_tail_fit_catastrophic_r_squared <= negative_fit_r_squared < recipe.background_tail_fit_min_r_squared
+        and recipe.background_tail_fit_catastrophic_r_squared
+        <= negative_fit_r_squared
+        < recipe.background_tail_fit_min_r_squared
     )
-    positive_tail_fit_r_squared_catastrophic = not decision_checks["positive_tail_fit_r_squared_catastrophic_ok"]
-    negative_tail_fit_r_squared_catastrophic = not decision_checks["negative_tail_fit_r_squared_catastrophic_ok"]
+    positive_tail_fit_r_squared_catastrophic = not decision_checks[
+        "positive_tail_fit_r_squared_catastrophic_ok"
+    ]
+    negative_tail_fit_r_squared_catastrophic = not decision_checks[
+        "negative_tail_fit_r_squared_catastrophic_ok"
+    ]
     soft_tail_fit_r_squared_warning_present = bool(
         positive_tail_fit_r_squared_soft_warning or negative_tail_fit_r_squared_soft_warning
     )
-    decision_checks["positive_tail_fit_r_squared_soft_warning"] = positive_tail_fit_r_squared_soft_warning
-    decision_checks["negative_tail_fit_r_squared_soft_warning"] = negative_tail_fit_r_squared_soft_warning
-    decision_checks["soft_tail_fit_r_squared_warning_present"] = soft_tail_fit_r_squared_warning_present
+    decision_checks["positive_tail_fit_r_squared_soft_warning"] = (
+        positive_tail_fit_r_squared_soft_warning
+    )
+    decision_checks["negative_tail_fit_r_squared_soft_warning"] = (
+        negative_tail_fit_r_squared_soft_warning
+    )
+    decision_checks["soft_tail_fit_r_squared_warning_present"] = (
+        soft_tail_fit_r_squared_warning_present
+    )
     soft_override_passed = bool(
         soft_tail_fit_r_squared_warning_present
         and decision_checks["positive_tail_fit_success"]
@@ -898,12 +994,18 @@ def _evaluate_background_mode(
     fit_gate_reasons = {
         "positive_tail_fit_success": "positive_tail_fit_failed",
         "negative_tail_fit_success": "negative_tail_fit_failed",
-        "positive_tail_fit_r_squared_catastrophic_ok": "positive_tail_fit_r_squared_catastrophically_low",
-        "negative_tail_fit_r_squared_catastrophic_ok": "negative_tail_fit_r_squared_catastrophically_low",
+        "positive_tail_fit_r_squared_catastrophic_ok": (
+            "positive_tail_fit_r_squared_catastrophically_low"
+        ),
+        "negative_tail_fit_r_squared_catastrophic_ok": (
+            "negative_tail_fit_r_squared_catastrophically_low"
+        ),
     }
     switching_gate_reasons = {
         "corrected_zero_crossing_increase_ok": "corrected_zero_crossings_increased",
-        "corrected_switching_width_available_or_not_needed": "corrected_switching_width_unavailable",
+        "corrected_switching_width_available_or_not_needed": (
+            "corrected_switching_width_unavailable"
+        ),
         "corrected_switching_width_change_ok": "corrected_switching_width_distorted",
         "corrected_coercive_ambiguity_worsening_ok": "corrected_coercive_ambiguity_worsened",
     }
@@ -916,9 +1018,15 @@ def _evaluate_background_mode(
 
     decision_reason = "score_improved"
     background_mode = "slope_only"
-    fit_failures = [label for label, passed in decision_checks.items() if label in fit_gate_reasons and not passed]
+    fit_failures = [
+        label
+        for label, passed in decision_checks.items()
+        if label in fit_gate_reasons and not passed
+    ]
     switching_gate_failures = [
-        label for label, passed in decision_checks.items() if label in switching_gate_reasons and not passed
+        label
+        for label, passed in decision_checks.items()
+        if label in switching_gate_reasons and not passed
     ]
     if warnings:
         background_mode = "rejected"
@@ -970,8 +1078,13 @@ def _evaluate_background_mode(
     if not decision_checks["tail_slope_disagreement_ok"]:
         warnings.append("background_fit_warning_tail_slope_disagreement_above_tolerance")
     if background_mode == "rejected":
-        warnings.extend(f"background_fit_rejected_{fit_gate_reasons[label]}" for label in fit_failures)
-        warnings.extend(f"background_fit_rejected_{switching_gate_reasons[label]}" for label in switching_gate_failures)
+        warnings.extend(
+            f"background_fit_rejected_{fit_gate_reasons[label]}" for label in fit_failures
+        )
+        warnings.extend(
+            f"background_fit_rejected_{switching_gate_reasons[label]}"
+            for label in switching_gate_failures
+        )
     elif background_mode == "none":
         warnings.append(f"background_fit_optional_{decision_reason}")
     elif soft_tail_fit_r_squared_warning_present:
@@ -1006,17 +1119,27 @@ def _evaluate_background_mode(
         "raw_metrics": raw_metrics,
         "corrected_candidate_metrics": corrected_metrics,
         "comparison": {
-            "raw_plateau_slope_positive_normalized": float(raw_metrics["plateau_slope_positive_normalized"]),
-            "raw_plateau_slope_negative_normalized": float(raw_metrics["plateau_slope_negative_normalized"]),
-            "corrected_plateau_slope_positive_normalized": float(corrected_metrics["plateau_slope_positive_normalized"]),
-            "corrected_plateau_slope_negative_normalized": float(corrected_metrics["plateau_slope_negative_normalized"]),
+            "raw_plateau_slope_positive_normalized": float(
+                raw_metrics["plateau_slope_positive_normalized"]
+            ),
+            "raw_plateau_slope_negative_normalized": float(
+                raw_metrics["plateau_slope_negative_normalized"]
+            ),
+            "corrected_plateau_slope_positive_normalized": float(
+                corrected_metrics["plateau_slope_positive_normalized"]
+            ),
+            "corrected_plateau_slope_negative_normalized": float(
+                corrected_metrics["plateau_slope_negative_normalized"]
+            ),
             "background_flatness_gain_positive": positive_flatness_gain,
             "background_flatness_gain_negative": negative_flatness_gain,
             "background_flatness_gain_score": flatness_gain_score,
             "background_flatness_gain_balance_score": flatness_gain_balance_score,
             "background_flatness_gain_balance_ok": decision_checks["flatness_gain_balance_ok"],
             "background_soft_override_passed": soft_override_passed,
-            "background_tail_slope_symmetry_score": float(corrected_metrics["tail_slope_symmetry_score"]),
+            "background_tail_slope_symmetry_score": float(
+                corrected_metrics["tail_slope_symmetry_score"]
+            ),
             "background_saturation_magnitude_symmetry_score": float(
                 corrected_metrics["saturation_magnitude_symmetry_score"]
             ),
@@ -1024,13 +1147,21 @@ def _evaluate_background_mode(
             "corrected_switching_width_mT": corrected_metrics.get("switching_width_mT"),
             "background_switching_width_relative_change": switching_width_relative_change,
             "raw_zero_crossing_candidate_count": int(raw_metrics["zero_crossing_candidate_count"]),
-            "corrected_zero_crossing_candidate_count": int(corrected_metrics["zero_crossing_candidate_count"]),
+            "corrected_zero_crossing_candidate_count": int(
+                corrected_metrics["zero_crossing_candidate_count"]
+            ),
             "background_zero_crossing_candidate_increase": zero_crossing_candidate_increase,
             "background_switching_asymmetry_increase": switching_asymmetry_increase,
-            "plateau_flatness_ratio_delta": float(corrected_metrics["plateau_flatness_ratio"]) - float(raw_metrics["plateau_flatness_ratio"]),
-            "saturation_consistency_ratio_delta": float(corrected_metrics["saturation_consistency_ratio"]) - float(raw_metrics["saturation_consistency_ratio"]),
-            "branch_asymmetry_delta": float(corrected_metrics["branch_asymmetry"]) - float(raw_metrics["branch_asymmetry"]),
-            "loop_closure_error_delta": float(corrected_metrics["loop_closure_error"]) - float(raw_metrics["loop_closure_error"]),
+            "plateau_flatness_ratio_delta": float(corrected_metrics["plateau_flatness_ratio"])
+            - float(raw_metrics["plateau_flatness_ratio"]),
+            "saturation_consistency_ratio_delta": float(
+                corrected_metrics["saturation_consistency_ratio"]
+            )
+            - float(raw_metrics["saturation_consistency_ratio"]),
+            "branch_asymmetry_delta": float(corrected_metrics["branch_asymmetry"])
+            - float(raw_metrics["branch_asymmetry"]),
+            "loop_closure_error_delta": float(corrected_metrics["loop_closure_error"])
+            - float(raw_metrics["loop_closure_error"]),
             "coercive_ambiguity_count_delta": coercive_ambiguity_worsening,
         },
         "score_raw": score_raw,
@@ -1051,8 +1182,12 @@ def _compute_background_quality_score(
     switching_integrity_score: float | None = None,
 ) -> tuple[float, dict[str, float]]:
     if flatness_gain_score is None:
-        positive_quality = 1.0 / (1.0 + max(float(metrics["plateau_slope_positive_normalized"]), 0.0))
-        negative_quality = 1.0 / (1.0 + max(float(metrics["plateau_slope_negative_normalized"]), 0.0))
+        positive_quality = 1.0 / (
+            1.0 + max(float(metrics["plateau_slope_positive_normalized"]), 0.0)
+        )
+        negative_quality = 1.0 / (
+            1.0 + max(float(metrics["plateau_slope_negative_normalized"]), 0.0)
+        )
         flatness_gain_score = float(np.mean([positive_quality, negative_quality]))
     if switching_integrity_score is None:
         switching_integrity_score = _compute_switching_integrity_quality(
@@ -1076,7 +1211,9 @@ def _compute_background_quality_score(
         "flatness_gain_score": float(flatness_gain_score),
         "flatness_gain_balance_score": float(flatness_gain_balance_score),
         "tail_slope_symmetry_score": float(metrics["tail_slope_symmetry_score"]),
-        "saturation_magnitude_symmetry_score": float(metrics["saturation_magnitude_symmetry_score"]),
+        "saturation_magnitude_symmetry_score": float(
+            metrics["saturation_magnitude_symmetry_score"]
+        ),
         "switching_integrity_score": float(switching_integrity_score),
     }
 
@@ -1096,7 +1233,9 @@ def _compute_switching_integrity_quality(
         switching_width_score = 0.0
     else:
         switching_width_score = float(np.clip(1.0 - switching_width_relative_change, 0.0, 1.0))
-    switching_asymmetry_score = float(np.clip(1.0 - max(float(switching_asymmetry_increase), 0.0), 0.0, 1.0))
+    switching_asymmetry_score = float(
+        np.clip(1.0 - max(float(switching_asymmetry_increase), 0.0), 0.0, 1.0)
+    )
     return float(
         np.mean(
             [
@@ -1117,7 +1256,9 @@ def _flatness_gain(raw_normalized_slope: float, corrected_normalized_slope: floa
 def _is_soft_warning_r_squared(r_squared: float | None, recipe: VsmPreprocessingRecipe) -> bool:
     return bool(
         r_squared is not None
-        and recipe.background_tail_fit_catastrophic_r_squared <= float(r_squared) < recipe.background_tail_fit_min_r_squared
+        and recipe.background_tail_fit_catastrophic_r_squared
+        <= float(r_squared)
+        < recipe.background_tail_fit_min_r_squared
     )
 
 

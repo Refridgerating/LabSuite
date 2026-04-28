@@ -81,7 +81,7 @@ def test_linear_halfmax_interpolation_is_used() -> None:
 
 def test_missing_halfmax_crossings_fail_gracefully() -> None:
     field = np.linspace(99.0, 101.0, 401)
-    absorption = np.exp(-((field - 100.0) / 0.02) ** 2)
+    absorption = np.exp(-(((field - 100.0) / 0.02) ** 2))
 
     metrics = compute_absorption_mode_metrics(
         field,

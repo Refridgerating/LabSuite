@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable, Mapping
 from dataclasses import asdict, dataclass, field
-from typing import Any, Iterable, Literal, Mapping
+from typing import Any, Literal
 
 import numpy as np
 
@@ -49,13 +50,15 @@ class ResonanceMetricsConfig:
         return payload
 
     @classmethod
-    def from_dict(cls, payload: Mapping[str, Any] | None) -> "ResonanceMetricsConfig":
+    def from_dict(cls, payload: Mapping[str, Any] | None) -> ResonanceMetricsConfig:
         if payload is None:
             return cls()
         return cls(
             compute_resonance_metrics=bool(payload.get("compute_resonance_metrics", True)),
             area_window_mode=str(payload.get("area_window_mode", "side-aware")),
-            area_window_multipliers=tuple(float(item) for item in payload.get("area_window_multipliers", (1, 2, 3))),
+            area_window_multipliers=tuple(
+                float(item) for item in payload.get("area_window_multipliers", (1, 2, 3))
+            ),
             compute_full_area=bool(payload.get("compute_full_area", False)),
             report_asymmetry=bool(payload.get("report_asymmetry", True)),
             halfmax_interp=str(payload.get("halfmax_interp", "linear")),
@@ -81,13 +84,17 @@ class ResonanceAreaWindow:
         return asdict(self)
 
     @classmethod
-    def from_dict(cls, payload: Mapping[str, Any]) -> "ResonanceAreaWindow":
+    def from_dict(cls, payload: Mapping[str, Any]) -> ResonanceAreaWindow:
         return cls(
             multiplier=float(payload["multiplier"]),
             label=str(payload["label"]),
             window_mode=str(payload["window_mode"]),
-            start_field_mT=None if payload.get("start_field_mT") is None else float(payload["start_field_mT"]),
-            end_field_mT=None if payload.get("end_field_mT") is None else float(payload["end_field_mT"]),
+            start_field_mT=None
+            if payload.get("start_field_mT") is None
+            else float(payload["start_field_mT"]),
+            end_field_mT=None
+            if payload.get("end_field_mT") is None
+            else float(payload["end_field_mT"]),
             area=None if payload.get("area") is None else float(payload["area"]),
         )
 
@@ -156,7 +163,7 @@ class ResonanceModeMetrics:
         }
 
     @classmethod
-    def from_dict(cls, payload: Mapping[str, Any]) -> "ResonanceModeMetrics":
+    def from_dict(cls, payload: Mapping[str, Any]) -> ResonanceModeMetrics:
         return cls(
             owner_kind=str(payload["owner_kind"]),
             owner_id=str(payload["owner_id"]),
@@ -164,26 +171,56 @@ class ResonanceModeMetrics:
             failure_reason=payload.get("failure_reason"),
             metrics_from=str(payload.get("metrics_from", "reconstructed_absorption")),
             hres=float(payload["hres"]),
-            peak_field_abs=None if payload.get("peak_field_abs") is None else float(payload["peak_field_abs"]),
-            peak_height_abs=None if payload.get("peak_height_abs") is None else float(payload["peak_height_abs"]),
-            half_max_level=None if payload.get("half_max_level") is None else float(payload["half_max_level"]),
-            h_left_half=None if payload.get("h_left_half") is None else float(payload["h_left_half"]),
-            h_right_half=None if payload.get("h_right_half") is None else float(payload["h_right_half"]),
+            peak_field_abs=None
+            if payload.get("peak_field_abs") is None
+            else float(payload["peak_field_abs"]),
+            peak_height_abs=None
+            if payload.get("peak_height_abs") is None
+            else float(payload["peak_height_abs"]),
+            half_max_level=None
+            if payload.get("half_max_level") is None
+            else float(payload["half_max_level"]),
+            h_left_half=None
+            if payload.get("h_left_half") is None
+            else float(payload["h_left_half"]),
+            h_right_half=None
+            if payload.get("h_right_half") is None
+            else float(payload["h_right_half"]),
             fwhm=None if payload.get("fwhm") is None else float(payload["fwhm"]),
             hwhm_left=None if payload.get("hwhm_left") is None else float(payload["hwhm_left"]),
             hwhm_right=None if payload.get("hwhm_right") is None else float(payload["hwhm_right"]),
-            asymmetry_ratio=None if payload.get("asymmetry_ratio") is None else float(payload["asymmetry_ratio"]),
-            area_pm_1fwhm=None if payload.get("area_pm_1fwhm") is None else float(payload["area_pm_1fwhm"]),
-            area_pm_2fwhm=None if payload.get("area_pm_2fwhm") is None else float(payload["area_pm_2fwhm"]),
-            area_pm_3fwhm=None if payload.get("area_pm_3fwhm") is None else float(payload["area_pm_3fwhm"]),
+            asymmetry_ratio=None
+            if payload.get("asymmetry_ratio") is None
+            else float(payload["asymmetry_ratio"]),
+            area_pm_1fwhm=None
+            if payload.get("area_pm_1fwhm") is None
+            else float(payload["area_pm_1fwhm"]),
+            area_pm_2fwhm=None
+            if payload.get("area_pm_2fwhm") is None
+            else float(payload["area_pm_2fwhm"]),
+            area_pm_3fwhm=None
+            if payload.get("area_pm_3fwhm") is None
+            else float(payload["area_pm_3fwhm"]),
             area_full=None if payload.get("area_full") is None else float(payload["area_full"]),
-            support_start_field_mT=None if payload.get("support_start_field_mT") is None else float(payload["support_start_field_mT"]),
-            support_end_field_mT=None if payload.get("support_end_field_mT") is None else float(payload["support_end_field_mT"]),
-            local_baseline_edge_points=None if payload.get("local_baseline_edge_points") is None else int(payload["local_baseline_edge_points"]),
-            local_baseline_slope=None if payload.get("local_baseline_slope") is None else float(payload["local_baseline_slope"]),
-            local_baseline_intercept=None if payload.get("local_baseline_intercept") is None else float(payload["local_baseline_intercept"]),
+            support_start_field_mT=None
+            if payload.get("support_start_field_mT") is None
+            else float(payload["support_start_field_mT"]),
+            support_end_field_mT=None
+            if payload.get("support_end_field_mT") is None
+            else float(payload["support_end_field_mT"]),
+            local_baseline_edge_points=None
+            if payload.get("local_baseline_edge_points") is None
+            else int(payload["local_baseline_edge_points"]),
+            local_baseline_slope=None
+            if payload.get("local_baseline_slope") is None
+            else float(payload["local_baseline_slope"]),
+            local_baseline_intercept=None
+            if payload.get("local_baseline_intercept") is None
+            else float(payload["local_baseline_intercept"]),
             signal_polarity=float(payload.get("signal_polarity", 1.0)),
-            area_windows=[ResonanceAreaWindow.from_dict(item) for item in payload.get("area_windows", [])],
+            area_windows=[
+                ResonanceAreaWindow.from_dict(item) for item in payload.get("area_windows", [])
+            ],
             metadata=dict(payload.get("metadata", {})),
         )
 
@@ -237,8 +274,16 @@ def compute_absorption_mode_metrics(
         field = field[::-1]
         signal = signal[::-1]
 
-    support_start = float(field[0]) if support_start_field_mT is None else float(max(support_start_field_mT, float(field[0])))
-    support_end = float(field[-1]) if support_end_field_mT is None else float(min(support_end_field_mT, float(field[-1])))
+    support_start = (
+        float(field[0])
+        if support_start_field_mT is None
+        else float(max(support_start_field_mT, float(field[0])))
+    )
+    support_end = (
+        float(field[-1])
+        if support_end_field_mT is None
+        else float(min(support_end_field_mT, float(field[-1])))
+    )
     support_mask = (field >= support_start) & (field <= support_end)
     support_indices = np.flatnonzero(support_mask)
     if support_indices.size < 5:
@@ -268,8 +313,12 @@ def compute_absorption_mode_metrics(
             metadata=metadata,
         )
 
-    baseline_field = np.concatenate((field[support_indices[:edge_points]], field[support_indices[-edge_points:]]))
-    baseline_signal = np.concatenate((signal[support_indices[:edge_points]], signal[support_indices[-edge_points:]]))
+    baseline_field = np.concatenate(
+        (field[support_indices[:edge_points]], field[support_indices[-edge_points:]])
+    )
+    baseline_signal = np.concatenate(
+        (signal[support_indices[:edge_points]], signal[support_indices[-edge_points:]])
+    )
     slope, intercept = np.polyfit(baseline_field, baseline_signal, deg=1)
     corrected_signal = signal - (slope * field + intercept)
     polarity = 1.0
@@ -296,12 +345,37 @@ def compute_absorption_mode_metrics(
             metadata=metadata,
         )
 
-    support_peak_indices = support_indices[np.isclose(corrected_signal[support_indices], peak_height, rtol=1e-9, atol=max(abs(peak_height) * 1e-9, 1e-12))]
-    peak_index = int(support_peak_indices[np.argmin(np.abs(field[support_peak_indices] - float(hres)))])
+    support_peak_indices = support_indices[
+        np.isclose(
+            corrected_signal[support_indices],
+            peak_height,
+            rtol=1e-9,
+            atol=max(abs(peak_height) * 1e-9, 1e-12),
+        )
+    ]
+    peak_index = int(
+        support_peak_indices[np.argmin(np.abs(field[support_peak_indices] - float(hres)))]
+    )
     peak_field_abs = float(field[peak_index])
     half_max_level = peak_height / 2.0
-    left_crossing = _find_halfmax_crossing(field, corrected_signal, peak_index=peak_index, support_indices=support_indices, half_max_level=half_max_level, direction="left", interpolation=config.halfmax_interp)
-    right_crossing = _find_halfmax_crossing(field, corrected_signal, peak_index=peak_index, support_indices=support_indices, half_max_level=half_max_level, direction="right", interpolation=config.halfmax_interp)
+    left_crossing = _find_halfmax_crossing(
+        field,
+        corrected_signal,
+        peak_index=peak_index,
+        support_indices=support_indices,
+        half_max_level=half_max_level,
+        direction="left",
+        interpolation=config.halfmax_interp,
+    )
+    right_crossing = _find_halfmax_crossing(
+        field,
+        corrected_signal,
+        peak_index=peak_index,
+        support_indices=support_indices,
+        half_max_level=half_max_level,
+        direction="right",
+        interpolation=config.halfmax_interp,
+    )
     if left_crossing is None or right_crossing is None:
         return _failed_metrics(
             owner_kind=owner_kind,
@@ -506,13 +580,22 @@ def _find_halfmax_crossing(
             y0 = float(signal[index - 1])
             y1 = float(signal[index])
             if (y0 <= half_max_level <= y1) or (y1 <= half_max_level <= y0):
-                return _interpolate_crossing(float(field[index - 1]), y0, float(field[index]), y1, half_max_level, interpolation)
+                return _interpolate_crossing(
+                    float(field[index - 1]),
+                    y0,
+                    float(field[index]),
+                    y1,
+                    half_max_level,
+                    interpolation,
+                )
         return None
     for index in range(peak_index, end):
         y0 = float(signal[index])
         y1 = float(signal[index + 1])
         if (y0 >= half_max_level >= y1) or (y1 >= half_max_level >= y0):
-            return _interpolate_crossing(float(field[index]), y0, float(field[index + 1]), y1, half_max_level, interpolation)
+            return _interpolate_crossing(
+                float(field[index]), y0, float(field[index + 1]), y1, half_max_level, interpolation
+            )
     return None
 
 
@@ -532,7 +615,9 @@ def _interpolate_crossing(
     return float(x0 + fraction * (x1 - x0))
 
 
-def _integrate_between(field: np.ndarray, signal: np.ndarray, start_field: float, end_field: float) -> float | None:
+def _integrate_between(
+    field: np.ndarray, signal: np.ndarray, start_field: float, end_field: float
+) -> float | None:
     bounded_start = max(float(field[0]), float(start_field))
     bounded_end = min(float(field[-1]), float(end_field))
     if bounded_end <= bounded_start:

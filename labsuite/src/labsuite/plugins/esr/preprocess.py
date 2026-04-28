@@ -14,8 +14,8 @@ from labsuite.core.preprocessing import (
 from labsuite.core.recipes import EsrPreprocessingRecipe
 from labsuite.core.types import (
     BaselineSummary,
-    IntegratedCurves,
     IntegralSummary,
+    IntegratedCurves,
     PeakWindow,
     PrimaryIntegratedCurves,
     ProcessedTrace,
@@ -39,7 +39,9 @@ def apply_esr_preprocessing(
         window_length=recipe.savgol_window,
         polyorder=recipe.savgol_polyorder,
     )
-    normalized_signal, scale_factor = normalize_max_abs(smoothed) if recipe.normalize else (smoothed, 1.0)
+    normalized_signal, scale_factor = (
+        normalize_max_abs(smoothed) if recipe.normalize else (smoothed, 1.0)
+    )
 
     return (
         ProcessedTrace(
@@ -86,10 +88,12 @@ def integrate_esr_trace(
     """Build diagnostic full-span absorption and area curves from a processed derivative trace."""
 
     absorption_raw = cumulative_integral(trace.field_mT, trace.signal)
-    absorption_corrected, _absorption_baseline_curve, absorption_baseline = subtract_linear_edge_baseline(
-        trace.field_mT,
-        absorption_raw,
-        edge_points=recipe.absorption_baseline_edge_points,
+    absorption_corrected, _absorption_baseline_curve, absorption_baseline = (
+        subtract_linear_edge_baseline(
+            trace.field_mT,
+            absorption_raw,
+            edge_points=recipe.absorption_baseline_edge_points,
+        )
     )
     area_signal = cumulative_integral(trace.field_mT, absorption_corrected)
 
@@ -246,7 +250,9 @@ def integrate_local_resonance_with_curves(
             recipe.integration_baseline_window_gamma_multiplier * abs(float(gamma_mT)),
             recipe.integration_baseline_window_min_half_width_mT,
         )
-        expanded_start = max(float(field[0]), float(peak_window.start_field_mT - baseline_half_width))
+        expanded_start = max(
+            float(field[0]), float(peak_window.start_field_mT - baseline_half_width)
+        )
         expanded_end = min(float(field[-1]), float(peak_window.end_field_mT + baseline_half_width))
         baseline_mask = _local_baseline_mask(
             field=field,
@@ -275,7 +281,9 @@ def integrate_local_resonance_with_curves(
         polyorder=actual_polyorder,
     )
     field_segment = np.asarray(field[integration_mask], dtype=float)
-    corrected_segment = np.asarray(signal[integration_mask] - baseline_curve[integration_mask], dtype=float)
+    corrected_segment = np.asarray(
+        signal[integration_mask] - baseline_curve[integration_mask], dtype=float
+    )
     local_absorption = cumulative_integral(field_segment, corrected_segment)
     local_area = cumulative_integral(field_segment, local_absorption)
 
@@ -358,7 +366,9 @@ def evaluate_local_resonance_diagnostic_reason(
     right_baseline_points = int(np.count_nonzero(baseline_mask & (field > end_field)))
     touches_left_edge = start_field <= float(field[0]) + 1e-12
     touches_right_edge = end_field >= float(field[-1]) - 1e-12
-    if (touches_left_edge or touches_right_edge) and (left_baseline_points == 0 or right_baseline_points == 0):
+    if (touches_left_edge or touches_right_edge) and (
+        left_baseline_points == 0 or right_baseline_points == 0
+    ):
         reasons.append("boundary_truncated_baseline")
 
     return None if not reasons else ";".join(reasons)

@@ -1,0 +1,52 @@
+schema_version: 1
+sample_analysis:
+  allow_partial_results: true
+  consume_processed_only: true
+  require_canonical: true
+
+magnetization:
+  ms_policy: prefer_vsm
+  vmag_policy: direct_or_area_times_thickness
+  propagate_volume_uncertainty: true
+
+fmr:
+  consume_existing_kittel: true
+  consume_existing_linewidth: true
+  summarize_field_offset_pairing: true
+  preferred_g_source: processed_then_registry
+
+anisotropy:
+  enabled: true
+  require_ms_for_k: true
+  compute_simple_k_perp: true
+  compute_k2_k4_from_ip_oop: true
+  sign_convention: labsuite_v1
+
+damping:
+  enabled: true
+  preferred_geometry: oop
+  allow_ip_with_warning: true
+
+esr:
+  enabled: true
+  use_for_intrinsic_g: false
+  use_for_angular_support: true
+  use_for_branch_consistency: true
+
+quality:
+  min_r2_kittel: 0.98
+  min_frequency_points: 5
+  min_frequency_span_ghz: 5
+  warn_if_unresolved_modes: true
+  meff_mismatch_relative: 0.10
+  field_offset_detected_mT: 1.0
+  linewidth_nonlinear_r2_min: 0.95
+  g_float_relative_stderr_max: 0.20
+  min_linewidth_points: 2
+
+outputs:
+  write_json: true
+  write_csv: true
+  write_markdown_report: true
+  write_provenance_snapshots: true
+  write_figures: true

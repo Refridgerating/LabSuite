@@ -1,0 +1,159 @@
+schema_version: 1
+processed_results:
+  ? fmr_MTJ-NoPattern_MTJ-2Ta5Co2NiFe0-5AlOx2NiFe-UnPatterned21APR2026-BroadbandSweep-R4-2Scotch-1000xingain-10xoutgain-500Hz---20260421-103152_default_2026-04-28T22_07_31Z
+  : result_id: fmr_MTJ-NoPattern_MTJ-2Ta5Co2NiFe0-5AlOx2NiFe-UnPatterned21APR2026-BroadbandSweep-R4-2Scotch-1000xingain-10xoutgain-500Hz---20260421-103152_default_2026-04-28T22_07_31Z
+    measurement_id: fmr:MTJ-NoPattern:MTJ(2Ta5Co2NiFe0,5AlOx2NiFe)UnPatterned21APR2026-BroadbandSweep-R4-2Scotch-1000xingain-10xoutgain-500Hz
+      - 20260421-103152
+    sample_id: MTJ-NoPattern
+    type: fmr
+    processed_path: F:\LabAnalysisSuite\labsuite\data\processed\smoke_fmr_registry\MTJ(2Ta5Co2NiFe0,5AlOx2NiFe)UnPatterned21APR2026-BroadbandSweep-R4-2Scotch-1000xingain-10xoutgain-500Hz
+      - 20260421-103152\MTJ(2Ta5Co2NiFe0,5AlOx2NiFe)UnPatterned21APR2026-BroadbandSweep-R4-2Scotch-1000xingain-10xoutgain-500Hz
+      - 20260421-103152_analysis.json
+    recipe_path: F:\LabAnalysisSuite\labsuite\recipes\fmr\default.yaml
+    recipe_hash: 01d87a1dbadd0c2a0b2cc85b398baf0d678ca10db971a788cbf96513f1274183
+    created_at: '2026-04-28T22:07:31Z'
+    status: canonical
+    summary:
+      geometry: ip
+      g_mode: float
+      g_value: null
+      branches:
+      - single_unassigned
+      - mode_1
+      - mode_2
+      field_polarity_correction:
+        enabled: false
+        method: gonzalez_fuentes_average
+        polarity_column: null
+        require_pair: true
+        group_by:
+        - sample_id
+        - replicate_id
+        - frequency
+        - geometry
+        - mode_id
+        positive_labels:
+        - positive
+        - pos
+        - plus
+        - +H
+        negative_labels:
+        - negative
+        - neg
+        - minus
+        - -H
+        max_pair_frequency_tolerance_ghz: 0.001
+        max_pair_hres_split_mT: null
+        on_unpaired: warn_and_keep_raw
+        fit_field: Hres_avg
+        run_comparison_fits: true
+        plot_diagnostics: false
+  fmr_MTJ-NoPattern_MTJUnPatterned-03APR2026-R1---20260403-151747_default_2026-04-28T22_01_24Z:
+    result_id: fmr_MTJ-NoPattern_MTJUnPatterned-03APR2026-R1---20260403-151747_default_2026-04-28T22_01_24Z
+    measurement_id: fmr:MTJ-NoPattern:MTJUnPatterned-03APR2026-R1 - 20260403-151747
+    sample_id: MTJ-NoPattern
+    type: fmr
+    processed_path: F:\LabAnalysisSuite\labsuite\data\processed\smoke_fmr_registry\MTJUnPatterned-03APR2026-R1
+      - 20260403-151747\MTJUnPatterned-03APR2026-R1 - 20260403-151747_analysis.json
+    recipe_path: F:\LabAnalysisSuite\labsuite\recipes\fmr\default.yaml
+    recipe_hash: 01d87a1dbadd0c2a0b2cc85b398baf0d678ca10db971a788cbf96513f1274183
+    created_at: '2026-04-28T22:01:24Z'
+    status: canonical
+    summary:
+      geometry: ip
+      g_mode: float
+      g_value: null
+      branches:
+      - mode_1
+      - mode_2
+      field_polarity_correction:
+        enabled: false
+        method: gonzalez_fuentes_average
+        polarity_column: null
+        require_pair: true
+        group_by:
+        - sample_id
+        - replicate_id
+        - frequency
+        - geometry
+        - mode_id
+        positive_labels:
+        - positive
+        - pos
+        - plus
+        - +H
+        negative_labels:
+        - negative
+        - neg
+        - minus
+        - -H
+        max_pair_frequency_tolerance_ghz: 0.001
+        max_pair_hres_split_mT: null
+        on_unpaired: warn_and_keep_raw
+        fit_field: Hres_avg
+        run_comparison_fits: true
+        plot_diagnostics: false
+  vsm_MTJ-NoPattern_MTJ-NOPATTERN-100K-R1_00001_default_2026-04-28T22_10_23Z:
+    result_id: vsm_MTJ-NoPattern_MTJ-NOPATTERN-100K-R1_00001_default_2026-04-28T22_10_23Z
+    measurement_id: vsm:MTJ-NoPattern:MTJ-NOPATTERN-100K-R1_00001
+    sample_id: MTJ-NoPattern
+    type: vsm
+    processed_path: F:\LabAnalysisSuite\labsuite\data\processed\smoke_vsm_registry\MTJ-NOPATTERN-100K-R1_00001\MTJ-NOPATTERN-100K-R1_00001_analysis.json
+    recipe_path: F:\LabAnalysisSuite\labsuite\recipes\vsm\default.yaml
+    recipe_hash: 9dc5b8600d7365663681255b118ba5ee4e334deff258e6da82c67940dfdece88
+    created_at: '2026-04-28T22:10:23Z'
+    status: canonical
+    summary:
+      geometry: unknown
+      g_mode: float
+      g_value: null
+      branches: []
+      field_polarity_correction: null
+  vsm_MTJ-NoPattern_MTJ-NOPATTERN-200K-R1_00001_default_2026-04-28T22_10_24Z:
+    result_id: vsm_MTJ-NoPattern_MTJ-NOPATTERN-200K-R1_00001_default_2026-04-28T22_10_24Z
+    measurement_id: vsm:MTJ-NoPattern:MTJ-NOPATTERN-200K-R1_00001
+    sample_id: MTJ-NoPattern
+    type: vsm
+    processed_path: F:\LabAnalysisSuite\labsuite\data\processed\smoke_vsm_registry\MTJ-NOPATTERN-200K-R1_00001\MTJ-NOPATTERN-200K-R1_00001_analysis.json
+    recipe_path: F:\LabAnalysisSuite\labsuite\recipes\vsm\default.yaml
+    recipe_hash: 9dc5b8600d7365663681255b118ba5ee4e334deff258e6da82c67940dfdece88
+    created_at: '2026-04-28T22:10:24Z'
+    status: canonical
+    summary:
+      geometry: unknown
+      g_mode: float
+      g_value: null
+      branches: []
+      field_polarity_correction: null
+  vsm_MTJ-NoPattern_MTJ-NOPATTERN-300K-R1_00001_default_2026-04-28T22_10_24Z:
+    result_id: vsm_MTJ-NoPattern_MTJ-NOPATTERN-300K-R1_00001_default_2026-04-28T22_10_24Z
+    measurement_id: vsm:MTJ-NoPattern:MTJ-NOPATTERN-300K-R1_00001
+    sample_id: MTJ-NoPattern
+    type: vsm
+    processed_path: F:\LabAnalysisSuite\labsuite\data\processed\smoke_vsm_registry\MTJ-NOPATTERN-300K-R1_00001\MTJ-NOPATTERN-300K-R1_00001_analysis.json
+    recipe_path: F:\LabAnalysisSuite\labsuite\recipes\vsm\default.yaml
+    recipe_hash: 9dc5b8600d7365663681255b118ba5ee4e334deff258e6da82c67940dfdece88
+    created_at: '2026-04-28T22:10:24Z'
+    status: canonical
+    summary:
+      geometry: unknown
+      g_mode: float
+      g_value: null
+      branches: []
+      field_polarity_correction: null
+  vsm_MTJ-NoPattern_MTJ-NOPATTERN-55K-R1_00001_default_2026-04-28T22_10_25Z:
+    result_id: vsm_MTJ-NoPattern_MTJ-NOPATTERN-55K-R1_00001_default_2026-04-28T22_10_25Z
+    measurement_id: vsm:MTJ-NoPattern:MTJ-NOPATTERN-55K-R1_00001
+    sample_id: MTJ-NoPattern
+    type: vsm
+    processed_path: F:\LabAnalysisSuite\labsuite\data\processed\smoke_vsm_registry\MTJ-NOPATTERN-55K-R1_00001\MTJ-NOPATTERN-55K-R1_00001_analysis.json
+    recipe_path: F:\LabAnalysisSuite\labsuite\recipes\vsm\default.yaml
+    recipe_hash: 9dc5b8600d7365663681255b118ba5ee4e334deff258e6da82c67940dfdece88
+    created_at: '2026-04-28T22:10:25Z'
+    status: canonical
+    summary:
+      geometry: unknown
+      g_mode: float
+      g_value: null
+      branches: []
+      field_polarity_correction: null

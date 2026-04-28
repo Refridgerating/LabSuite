@@ -179,7 +179,9 @@ def analyze_vsm_file(
             },
         )
 
-    processed_moment, preprocessing_steps, preprocessing_warnings = apply_vsm_preprocessing(dataset, recipe)
+    processed_moment, preprocessing_steps, preprocessing_warnings = apply_vsm_preprocessing(
+        dataset, recipe
+    )
     branch_ids, branches = split_vsm_branches(dataset.field_mT)
     background_fit, loop_variants, tail_masks, background_warnings = fit_background_slope(
         dataset.field_mT,
@@ -206,25 +208,35 @@ def analyze_vsm_file(
     )
 
     centered_field = np.asarray(dataset.field_mT - centering.field_offset_mT, dtype=float)
-    centered_moment = np.asarray(loop_variants["final_moment_emu"] - centering.moment_offset_emu, dtype=float)
+    centered_moment = np.asarray(
+        loop_variants["final_moment_emu"] - centering.moment_offset_emu, dtype=float
+    )
     final_field = centered_field if centering.applied else np.asarray(dataset.field_mT, dtype=float)
-    final_moment = centered_moment if centering.applied else np.asarray(loop_variants["final_moment_emu"], dtype=float)
+    final_moment = (
+        centered_moment
+        if centering.applied
+        else np.asarray(loop_variants["final_moment_emu"], dtype=float)
+    )
 
     final_metrics = summarize_loop_quality(
         field_mT=final_field,
         moment_emu=final_moment,
         branches=branches,
-        positive_tail_indices=np.asarray(combined_background["selected_positive_indices"], dtype=int),
-        negative_tail_indices=np.asarray(combined_background["selected_negative_indices"], dtype=int),
+        positive_tail_indices=np.asarray(
+            combined_background["selected_positive_indices"], dtype=int
+        ),
+        negative_tail_indices=np.asarray(
+            combined_background["selected_negative_indices"], dtype=int
+        ),
         temperature_k=dataset.temperature_k,
     )
 
     warnings = list(
         dict.fromkeys(
             [
-        *filename_warnings,
-        *preprocessing_warnings,
-        *background_warnings,
+                *filename_warnings,
+                *preprocessing_warnings,
+                *background_warnings,
                 *uncorrected_metrics.get("warnings", []),
                 *corrected_candidate_metrics.get("warnings", []),
                 *final_metrics.get("warnings", []),
@@ -251,7 +263,9 @@ def analyze_vsm_file(
         condition_metadata={
             "temperature_k": final_metrics.get("temperature_k"),
             "registry_geometry": None if sample_context is None else sample_context.geometry,
-            "registry_measurement_id": None if sample_context is None else sample_context.measurement_id,
+            "registry_measurement_id": None
+            if sample_context is None
+            else sample_context.measurement_id,
         },
         raw_metadata=dataset.metadata,
     )
@@ -278,7 +292,9 @@ def analyze_vsm_file(
         "series_id": sample_record.series_id,
         "replicate_id": sample_record.filename_tokens.get("replicate_id"),
         "filename_sample_id": filename_sample_id,
-        "registry_measurement_id": None if sample_context is None else sample_context.measurement_id,
+        "registry_measurement_id": None
+        if sample_context is None
+        else sample_context.measurement_id,
         "registry_geometry": None if sample_context is None else sample_context.geometry,
         "acquisition_index": sample_record.filename_tokens.get("acquisition_index"),
         "saturation_confidence": trust_diagnostics["saturation_confidence"],
@@ -300,21 +316,39 @@ def analyze_vsm_file(
         "background_score_raw": background_qc["score_raw"],
         "background_score_corrected": background_qc["score_corrected"],
         "background_score_delta": background_qc["score_delta"],
-        "raw_plateau_slope_positive_normalized": background_qc["comparison"]["raw_plateau_slope_positive_normalized"],
-        "raw_plateau_slope_negative_normalized": background_qc["comparison"]["raw_plateau_slope_negative_normalized"],
+        "raw_plateau_slope_positive_normalized": background_qc["comparison"][
+            "raw_plateau_slope_positive_normalized"
+        ],
+        "raw_plateau_slope_negative_normalized": background_qc["comparison"][
+            "raw_plateau_slope_negative_normalized"
+        ],
         "corrected_plateau_slope_positive_normalized": background_qc["comparison"][
             "corrected_plateau_slope_positive_normalized"
         ],
         "corrected_plateau_slope_negative_normalized": background_qc["comparison"][
             "corrected_plateau_slope_negative_normalized"
         ],
-        "background_flatness_gain_positive": background_qc["comparison"]["background_flatness_gain_positive"],
-        "background_flatness_gain_negative": background_qc["comparison"]["background_flatness_gain_negative"],
-        "background_flatness_gain_score": background_qc["comparison"]["background_flatness_gain_score"],
-        "background_flatness_gain_balance_score": background_qc["comparison"]["background_flatness_gain_balance_score"],
-        "background_flatness_gain_balance_ok": background_qc["comparison"]["background_flatness_gain_balance_ok"],
-        "background_soft_override_passed": background_qc["comparison"]["background_soft_override_passed"],
-        "background_tail_slope_symmetry_score": background_qc["comparison"]["background_tail_slope_symmetry_score"],
+        "background_flatness_gain_positive": background_qc["comparison"][
+            "background_flatness_gain_positive"
+        ],
+        "background_flatness_gain_negative": background_qc["comparison"][
+            "background_flatness_gain_negative"
+        ],
+        "background_flatness_gain_score": background_qc["comparison"][
+            "background_flatness_gain_score"
+        ],
+        "background_flatness_gain_balance_score": background_qc["comparison"][
+            "background_flatness_gain_balance_score"
+        ],
+        "background_flatness_gain_balance_ok": background_qc["comparison"][
+            "background_flatness_gain_balance_ok"
+        ],
+        "background_soft_override_passed": background_qc["comparison"][
+            "background_soft_override_passed"
+        ],
+        "background_tail_slope_symmetry_score": background_qc["comparison"][
+            "background_tail_slope_symmetry_score"
+        ],
         "background_saturation_magnitude_symmetry_score": background_qc["comparison"][
             "background_saturation_magnitude_symmetry_score"
         ],
@@ -323,39 +357,71 @@ def analyze_vsm_file(
         "background_switching_width_relative_change": background_qc["comparison"][
             "background_switching_width_relative_change"
         ],
-        "raw_zero_crossing_candidate_count": background_qc["comparison"]["raw_zero_crossing_candidate_count"],
+        "raw_zero_crossing_candidate_count": background_qc["comparison"][
+            "raw_zero_crossing_candidate_count"
+        ],
         "corrected_zero_crossing_candidate_count": background_qc["comparison"][
             "corrected_zero_crossing_candidate_count"
         ],
         "raw_plateau_flatness_ratio": uncorrected_metrics["plateau_flatness_ratio"],
         "corrected_plateau_flatness_ratio": corrected_candidate_metrics["plateau_flatness_ratio"],
         "raw_saturation_consistency_ratio": uncorrected_metrics["saturation_consistency_ratio"],
-        "corrected_saturation_consistency_ratio": corrected_candidate_metrics["saturation_consistency_ratio"],
+        "corrected_saturation_consistency_ratio": corrected_candidate_metrics[
+            "saturation_consistency_ratio"
+        ],
         "raw_branch_asymmetry": uncorrected_metrics["branch_asymmetry"],
         "corrected_branch_asymmetry": corrected_candidate_metrics["branch_asymmetry"],
         "raw_loop_closure_error": uncorrected_metrics["loop_closure_error"],
         "corrected_loop_closure_error": corrected_candidate_metrics["loop_closure_error"],
         "raw_coercive_ambiguity_count": uncorrected_metrics["coercive_ambiguity_count"],
-        "corrected_coercive_ambiguity_count": corrected_candidate_metrics["coercive_ambiguity_count"],
+        "corrected_coercive_ambiguity_count": corrected_candidate_metrics[
+            "coercive_ambiguity_count"
+        ],
         "positive_tail_fit_r_squared": background_qc["positive_tail_fit_r_squared"],
         "negative_tail_fit_r_squared": background_qc["negative_tail_fit_r_squared"],
-        "positive_tail_fit_r_squared_soft_warning": background_qc["positive_tail_fit_r_squared_soft_warning"],
-        "negative_tail_fit_r_squared_soft_warning": background_qc["negative_tail_fit_r_squared_soft_warning"],
-        "positive_tail_fit_r_squared_catastrophic": background_qc["positive_tail_fit_r_squared_catastrophic"],
-        "negative_tail_fit_r_squared_catastrophic": background_qc["negative_tail_fit_r_squared_catastrophic"],
-        "corrected_positive_tail_slope_emu_per_mT": background_qc["corrected_positive_tail_slope_emu_per_mT"],
-        "corrected_negative_tail_slope_emu_per_mT": background_qc["corrected_negative_tail_slope_emu_per_mT"],
-        "corrected_tail_slope_abs_mismatch_emu_per_mT": background_qc["corrected_tail_slope_abs_mismatch_emu_per_mT"],
+        "positive_tail_fit_r_squared_soft_warning": background_qc[
+            "positive_tail_fit_r_squared_soft_warning"
+        ],
+        "negative_tail_fit_r_squared_soft_warning": background_qc[
+            "negative_tail_fit_r_squared_soft_warning"
+        ],
+        "positive_tail_fit_r_squared_catastrophic": background_qc[
+            "positive_tail_fit_r_squared_catastrophic"
+        ],
+        "negative_tail_fit_r_squared_catastrophic": background_qc[
+            "negative_tail_fit_r_squared_catastrophic"
+        ],
+        "corrected_positive_tail_slope_emu_per_mT": background_qc[
+            "corrected_positive_tail_slope_emu_per_mT"
+        ],
+        "corrected_negative_tail_slope_emu_per_mT": background_qc[
+            "corrected_negative_tail_slope_emu_per_mT"
+        ],
+        "corrected_tail_slope_abs_mismatch_emu_per_mT": background_qc[
+            "corrected_tail_slope_abs_mismatch_emu_per_mT"
+        ],
         "positive_tail_flatness_ratio": background_qc["positive_tail_flatness_ratio"],
         "negative_tail_flatness_ratio": background_qc["negative_tail_flatness_ratio"],
         "raw_tail_slope_disagreement_ratio": background_qc["raw_tail_slope_disagreement_ratio"],
         "tail_window_selection_mode": background_qc["tail_window_selection_mode"],
-        "positive_tail_window_initial_point_count": background_qc["positive_tail_window_initial_point_count"],
-        "negative_tail_window_initial_point_count": background_qc["negative_tail_window_initial_point_count"],
-        "positive_tail_window_selected_point_count": background_qc["positive_tail_window_selected_point_count"],
-        "negative_tail_window_selected_point_count": background_qc["negative_tail_window_selected_point_count"],
-        "positive_tail_window_selected_field_min_mT": background_qc["positive_tail_window_selected_field_min_mT"],
-        "negative_tail_window_selected_field_max_mT": background_qc["negative_tail_window_selected_field_max_mT"],
+        "positive_tail_window_initial_point_count": background_qc[
+            "positive_tail_window_initial_point_count"
+        ],
+        "negative_tail_window_initial_point_count": background_qc[
+            "negative_tail_window_initial_point_count"
+        ],
+        "positive_tail_window_selected_point_count": background_qc[
+            "positive_tail_window_selected_point_count"
+        ],
+        "negative_tail_window_selected_point_count": background_qc[
+            "negative_tail_window_selected_point_count"
+        ],
+        "positive_tail_window_selected_field_min_mT": background_qc[
+            "positive_tail_window_selected_field_min_mT"
+        ],
+        "negative_tail_window_selected_field_max_mT": background_qc[
+            "negative_tail_window_selected_field_max_mT"
+        ],
         "positive_tail_window_soft_r_squared_rescue_attempted": background_qc[
             "positive_tail_window_soft_r_squared_rescue_attempted"
         ],
@@ -473,7 +539,9 @@ def export_vsm_analysis_json(result: MeasurementAnalysisResult, destination: Pat
     return destination
 
 
-def export_vsm_analysis_csv(result: MeasurementAnalysisResult | dict[str, Any], destination: Path) -> Path:
+def export_vsm_analysis_csv(
+    result: MeasurementAnalysisResult | dict[str, Any], destination: Path
+) -> Path:
     """Export evaluated VSM loop data to CSV."""
 
     payload = _normalize_result(result)
@@ -510,11 +578,15 @@ def export_vsm_analysis_csv(result: MeasurementAnalysisResult | dict[str, Any], 
     slope = float(combined_background["slope_emu_per_mT"])
     positive_tail_index_map = {
         int(index): float(fit_value)
-        for index, fit_value in zip(positive_fit["selected_indices"], positive_fit["fitted_y"], strict=True)
+        for index, fit_value in zip(
+            positive_fit["selected_indices"], positive_fit["fitted_y"], strict=True
+        )
     }
     negative_tail_index_map = {
         int(index): float(fit_value)
-        for index, fit_value in zip(negative_fit["selected_indices"], negative_fit["fitted_y"], strict=True)
+        for index, fit_value in zip(
+            negative_fit["selected_indices"], negative_fit["fitted_y"], strict=True
+        )
     }
 
     with destination.open("w", encoding="utf-8", newline="") as handle:
@@ -552,7 +624,9 @@ def export_vsm_analysis_csv(result: MeasurementAnalysisResult | dict[str, Any], 
     return destination
 
 
-def export_vsm_summary_csv(result: MeasurementAnalysisResult | dict[str, Any], destination: Path) -> Path:
+def export_vsm_summary_csv(
+    result: MeasurementAnalysisResult | dict[str, Any], destination: Path
+) -> Path:
     """Export the scalar VSM summary row to CSV."""
 
     payload = _normalize_result(result)
@@ -569,7 +643,9 @@ def export_vsm_summary_csv(result: MeasurementAnalysisResult | dict[str, Any], d
     return destination
 
 
-def export_vsm_analysis_figure(result: MeasurementAnalysisResult | dict[str, Any], destination: Path) -> Path:
+def export_vsm_analysis_figure(
+    result: MeasurementAnalysisResult | dict[str, Any], destination: Path
+) -> Path:
     """Save the VSM diagnostic figure."""
 
     payload = _normalize_result(result)
@@ -596,8 +672,20 @@ def export_vsm_analysis_figure(result: MeasurementAnalysisResult | dict[str, Any
     applied_background = slope * field_mT
 
     axes[0].plot(field_mT, raw_moment, color="#5f6b7a", linewidth=1.1, label="Raw moment")
-    axes[0].plot(field_mT, uncorrected_moment, color="#0f766e", linewidth=1.1, label="Uncorrected analysis moment")
-    axes[0].plot(field_mT, slope_corrected_moment, color="#2563eb", linewidth=1.1, label="Slope-corrected candidate")
+    axes[0].plot(
+        field_mT,
+        uncorrected_moment,
+        color="#0f766e",
+        linewidth=1.1,
+        label="Uncorrected analysis moment",
+    )
+    axes[0].plot(
+        field_mT,
+        slope_corrected_moment,
+        color="#2563eb",
+        linewidth=1.1,
+        label="Slope-corrected candidate",
+    )
     axes[0].plot(
         field_mT,
         applied_background,
@@ -611,11 +699,35 @@ def export_vsm_analysis_figure(result: MeasurementAnalysisResult | dict[str, Any
     negative_fit_x = np.asarray(negative_fit["fitted_x"], dtype=float)
     negative_fit_y = np.asarray(negative_fit["fitted_y"], dtype=float)
     if positive_fit_x.size:
-        axes[0].plot(positive_fit_x, positive_fit_y, color="#b91c1c", linewidth=1.4, label="Positive tail fit")
-        axes[0].scatter(positive_fit_x, uncorrected_moment[np.asarray(positive_fit["selected_indices"], dtype=int)], s=14, color="#b91c1c", alpha=0.8)
+        axes[0].plot(
+            positive_fit_x,
+            positive_fit_y,
+            color="#b91c1c",
+            linewidth=1.4,
+            label="Positive tail fit",
+        )
+        axes[0].scatter(
+            positive_fit_x,
+            uncorrected_moment[np.asarray(positive_fit["selected_indices"], dtype=int)],
+            s=14,
+            color="#b91c1c",
+            alpha=0.8,
+        )
     if negative_fit_x.size:
-        axes[0].plot(negative_fit_x, negative_fit_y, color="#7c2d12", linewidth=1.4, label="Negative tail fit")
-        axes[0].scatter(negative_fit_x, uncorrected_moment[np.asarray(negative_fit["selected_indices"], dtype=int)], s=14, color="#7c2d12", alpha=0.8)
+        axes[0].plot(
+            negative_fit_x,
+            negative_fit_y,
+            color="#7c2d12",
+            linewidth=1.4,
+            label="Negative tail fit",
+        )
+        axes[0].scatter(
+            negative_fit_x,
+            uncorrected_moment[np.asarray(negative_fit["selected_indices"], dtype=int)],
+            s=14,
+            color="#7c2d12",
+            alpha=0.8,
+        )
     axes[0].set_title(f"Raw and Evaluated Background Fits: {summary_metrics['sample_id']}")
     axes[0].set_ylabel("Moment (emu)")
     axes[0].grid(alpha=0.2)
@@ -627,7 +739,9 @@ def export_vsm_analysis_figure(result: MeasurementAnalysisResult | dict[str, Any
         end = int(branch["end_index"]) + 1
         color = color_cycle[int(branch["branch_id"]) % len(color_cycle)]
         label = f"Branch {branch['branch_id']} ({branch['direction']})"
-        axes[1].plot(final_field[start:end], final_moment[start:end], color=color, linewidth=1.3, label=label)
+        axes[1].plot(
+            final_field[start:end], final_moment[start:end], color=color, linewidth=1.3, label=label
+        )
 
     if summary_metrics.get("background_mode") != "slope_only":
         axes[1].plot(
@@ -639,7 +753,14 @@ def export_vsm_analysis_figure(result: MeasurementAnalysisResult | dict[str, Any
             label="Slope-corrected candidate",
         )
     if centering["applied"]:
-        axes[1].plot(field_mT, selected_moment, color="0.45", linewidth=0.9, linestyle="-.", label="Selected uncentered")
+        axes[1].plot(
+            field_mT,
+            selected_moment,
+            color="0.45",
+            linewidth=0.9,
+            linestyle="-.",
+            label="Selected uncentered",
+        )
 
     axes[1].axhline(0.0, color="0.3", linewidth=0.8)
     axes[1].axvline(0.0, color="0.3", linewidth=0.8)
@@ -657,7 +778,12 @@ def export_vsm_analysis_figure(result: MeasurementAnalysisResult | dict[str, Any
         ha="left",
         fontsize=8,
         family="monospace",
-        bbox={"facecolor": "white", "alpha": 0.86, "edgecolor": "0.75", "boxstyle": "round,pad=0.35"},
+        bbox={
+            "facecolor": "white",
+            "alpha": 0.86,
+            "edgecolor": "0.75",
+            "boxstyle": "round,pad=0.35",
+        },
     )
 
     figure.savefig(destination, dpi=200)
@@ -703,11 +829,15 @@ def export_vsm_batch_overlay_figure(
     return {"batch_hysteresis_overlay": destination}
 
 
-def export_vsm_bundle_from_json(analysis_json_path: Path, output_dir: Path | None = None) -> dict[str, Path]:
+def export_vsm_bundle_from_json(
+    analysis_json_path: Path, output_dir: Path | None = None
+) -> dict[str, Path]:
     """Regenerate CSV and figure artifacts from a saved VSM JSON result."""
 
     payload = load_vsm_analysis_json(analysis_json_path)
-    destination_dir = output_dir.resolve() if output_dir is not None else analysis_json_path.resolve().parent
+    destination_dir = (
+        output_dir.resolve() if output_dir is not None else analysis_json_path.resolve().parent
+    )
     destination_dir.mkdir(parents=True, exist_ok=True)
     stem = Path(payload["measurement"]["source_path"]).stem
     csv_path = destination_dir / f"{stem}_trace.csv"
@@ -730,14 +860,20 @@ def load_vsm_analysis_json(path: Path) -> dict[str, Any]:
     return json.loads(path.read_text(encoding="utf-8"))
 
 
-def build_vsm_report(input_path: Path, output_path: Path | None = None, *, recursive: bool = True) -> Path:
+def build_vsm_report(
+    input_path: Path, output_path: Path | None = None, *, recursive: bool = True
+) -> Path:
     """Generate a Markdown report from one or many saved VSM JSON analyses."""
 
     resolved_input = input_path.resolve()
     if resolved_input.is_file():
         payload = load_vsm_analysis_json(resolved_input)
-        destination = output_path.resolve() if output_path is not None else resolved_input.with_name(
-            f"{resolved_input.stem.replace('_analysis', '')}_report.md"
+        destination = (
+            output_path.resolve()
+            if output_path is not None
+            else resolved_input.with_name(
+                f"{resolved_input.stem.replace('_analysis', '')}_report.md"
+            )
         )
         destination.write_text(_build_single_report_text(payload), encoding="utf-8")
         return destination
@@ -746,14 +882,18 @@ def build_vsm_report(input_path: Path, output_path: Path | None = None, *, recur
         raise WorkflowError(f"Report input is neither a file nor directory: {resolved_input}")
 
     json_paths = sorted(
-        resolved_input.rglob("*_analysis.json") if recursive else resolved_input.glob("*_analysis.json"),
+        resolved_input.rglob("*_analysis.json")
+        if recursive
+        else resolved_input.glob("*_analysis.json"),
         key=lambda path: str(path).lower(),
     )
     if not json_paths:
         raise WorkflowError(f"No analysis JSON files found under {resolved_input}")
 
     payloads = [load_vsm_analysis_json(path) for path in json_paths]
-    destination = output_path.resolve() if output_path is not None else resolved_input / "batch_report.md"
+    destination = (
+        output_path.resolve() if output_path is not None else resolved_input / "batch_report.md"
+    )
     destination.write_text(_build_batch_report_text(payloads), encoding="utf-8")
     return destination
 
@@ -803,15 +943,25 @@ def _parse_vsm_filename_metadata(path: Path) -> tuple[SampleRecord, list[str]]:
     )
 
 
-def _build_plot_manifest(summary_metrics: dict[str, Any], centering: CenteringResult) -> PlotManifest:
+def _build_plot_manifest(
+    summary_metrics: dict[str, Any], centering: CenteringResult
+) -> PlotManifest:
     return PlotManifest(
         figure_type="vsm_loop_diagnostic",
         title=f"VSM Loop Diagnostic: {summary_metrics['sample_id']}",
         series=[
             {"label": "Raw moment", "x": "field_mT", "y": "moment_emu"},
-            {"label": "Slope-corrected candidate", "x": "field_mT", "y": "slope_corrected_moment_emu"},
+            {
+                "label": "Slope-corrected candidate",
+                "x": "field_mT",
+                "y": "slope_corrected_moment_emu",
+            },
             {"label": "Final loop", "x": "final_field_mT", "y": "final_moment_emu"},
-            {"label": "Evaluated slope-only background", "x": "field_mT", "y": "background_fit_emu"},
+            {
+                "label": "Evaluated slope-only background",
+                "x": "field_mT",
+                "y": "background_fit_emu",
+            },
         ],
         annotations=[
             {"label": "Hc-", "value": summary_metrics.get("coercive_field_negative_mT")},
@@ -847,43 +997,120 @@ def _format_float(value: Any) -> str:
     return f"{numeric_value:.10g}"
 
 
+def _summary_float(summary: dict[str, Any], key: str) -> str:
+    return _format_float(summary.get(key))
+
+
+def _summary_pair(summary: dict[str, Any], first_key: str, second_key: str) -> str:
+    return f"{_summary_float(summary, first_key)} / {_summary_float(summary, second_key)}"
+
+
+def _summary_raw_pair(summary: dict[str, Any], first_key: str, second_key: str) -> str:
+    return f"{summary.get(first_key)} / {summary.get(second_key)}"
+
+
+def _summary_pm(summary: dict[str, Any], value_key: str, error_key: str) -> str:
+    return f"{_summary_float(summary, value_key)} +/- {_summary_float(summary, error_key)}"
+
+
 def _build_metric_summary(payload: dict[str, Any]) -> str:
     summary_metrics = payload["summary_metrics"]
+    raw_tail_slopes = _summary_pair(
+        summary_metrics,
+        "raw_plateau_slope_positive_normalized",
+        "raw_plateau_slope_negative_normalized",
+    )
+    corrected_tail_slopes = _summary_pair(
+        summary_metrics,
+        "corrected_plateau_slope_positive_normalized",
+        "corrected_plateau_slope_negative_normalized",
+    )
+    tail_fit_r2 = _summary_pair(
+        summary_metrics,
+        "positive_tail_fit_r_squared",
+        "negative_tail_fit_r_squared",
+    )
+    tail_fit_soft_warnings = _summary_raw_pair(
+        summary_metrics,
+        "positive_tail_fit_r_squared_soft_warning",
+        "negative_tail_fit_r_squared_soft_warning",
+    )
+    tail_fit_catastrophic = _summary_raw_pair(
+        summary_metrics,
+        "positive_tail_fit_r_squared_catastrophic",
+        "negative_tail_fit_r_squared_catastrophic",
+    )
+    flatness_gain_pair = _summary_pair(
+        summary_metrics,
+        "background_flatness_gain_positive",
+        "background_flatness_gain_negative",
+    )
+    flatness_gain_score = _summary_float(summary_metrics, "background_flatness_gain_score")
+    tail_rescue_attempted = _summary_raw_pair(
+        summary_metrics,
+        "positive_tail_window_soft_r_squared_rescue_attempted",
+        "negative_tail_window_soft_r_squared_rescue_attempted",
+    )
+    tail_rescue_changed = _summary_raw_pair(
+        summary_metrics,
+        "positive_tail_window_rescue_changed_selection",
+        "negative_tail_window_rescue_changed_selection",
+    )
+    switching_width = _summary_pair(
+        summary_metrics,
+        "raw_switching_width_mT",
+        "corrected_switching_width_mT",
+    )
+    zero_crossings = _summary_pair(
+        summary_metrics,
+        "raw_zero_crossing_candidate_count",
+        "corrected_zero_crossing_candidate_count",
+    )
     lines = [
-        f"Ms = {_format_float(summary_metrics.get('Ms_emu'))} +/- {_format_float(summary_metrics.get('ms_error'))} emu",
-        f"Mr = {_format_float(summary_metrics.get('Mr_emu'))} +/- {_format_float(summary_metrics.get('mr_error'))} emu",
-        f"Hc = {_format_float(summary_metrics.get('Hc_mT'))} +/- {_format_float(summary_metrics.get('hc_error'))} mT",
-        f"Hex = {_format_float(summary_metrics.get('exchange_bias_mT'))} +/- {_format_float(summary_metrics.get('hex_error'))} mT",
-        f"squareness = {_format_float(summary_metrics.get('squareness'))} +/- {_format_float(summary_metrics.get('squareness_error'))}",
+        f"Ms = {_summary_pm(summary_metrics, 'Ms_emu', 'ms_error')} emu",
+        f"Mr = {_summary_pm(summary_metrics, 'Mr_emu', 'mr_error')} emu",
+        f"Hc = {_summary_pm(summary_metrics, 'Hc_mT', 'hc_error')} mT",
+        f"Hex = {_summary_pm(summary_metrics, 'exchange_bias_mT', 'hex_error')} mT",
+        f"squareness = {_summary_pm(summary_metrics, 'squareness', 'squareness_error')}",
         f"vertical shift = {_format_float(summary_metrics.get('vertical_shift_emu'))} emu",
-        f"loop area = {_format_float(summary_metrics.get('loop_area_emu_mT'))} +/- {_format_float(summary_metrics.get('loop_area_error'))} emu*mT",
+        f"loop area = {_summary_pm(summary_metrics, 'loop_area_emu_mT', 'loop_area_error')} emu*mT",
         f"saturation confidence = {_format_float(summary_metrics.get('saturation_confidence'))}",
         f"background mode = {summary_metrics.get('background_mode')}",
         f"background accepted = {summary_metrics.get('background_correction_accepted')}",
         f"background reason = {summary_metrics.get('background_decision_reason')}",
         f"background qc passed = {summary_metrics.get('background_qc_passed')}",
         f"tail selection mode = {summary_metrics.get('tail_window_selection_mode')}",
-        f"tail window pts init sel +/- = {_format_float(summary_metrics.get('positive_tail_window_initial_point_count'))}:{_format_float(summary_metrics.get('positive_tail_window_selected_point_count'))} / {_format_float(summary_metrics.get('negative_tail_window_initial_point_count'))}:{_format_float(summary_metrics.get('negative_tail_window_selected_point_count'))}",
-        f"tail slopes raw +/- = {_format_float(summary_metrics.get('raw_plateau_slope_positive_normalized'))} / {_format_float(summary_metrics.get('raw_plateau_slope_negative_normalized'))}",
-        f"tail slopes corr +/- = {_format_float(summary_metrics.get('corrected_plateau_slope_positive_normalized'))} / {_format_float(summary_metrics.get('corrected_plateau_slope_negative_normalized'))}",
-        f"tail fit r^2 +/- = {_format_float(summary_metrics.get('positive_tail_fit_r_squared'))} / {_format_float(summary_metrics.get('negative_tail_fit_r_squared'))}",
-        f"tail fit soft warn +/- = {summary_metrics.get('positive_tail_fit_r_squared_soft_warning')} / {summary_metrics.get('negative_tail_fit_r_squared_soft_warning')}",
-        f"tail fit catastrophic +/- = {summary_metrics.get('positive_tail_fit_r_squared_catastrophic')} / {summary_metrics.get('negative_tail_fit_r_squared_catastrophic')}",
-        f"flatness gain +/- = {_format_float(summary_metrics.get('background_flatness_gain_positive'))} / {_format_float(summary_metrics.get('background_flatness_gain_negative'))}",
-        f"flatness gain score = {_format_float(summary_metrics.get('background_flatness_gain_score'))}",
-        f"flatness gain balance = {_format_float(summary_metrics.get('background_flatness_gain_balance_score'))}",
+        "tail window pts init sel +/- = "
+        f"{_summary_float(summary_metrics, 'positive_tail_window_initial_point_count')}:"
+        f"{_summary_float(summary_metrics, 'positive_tail_window_selected_point_count')} / "
+        f"{_summary_float(summary_metrics, 'negative_tail_window_initial_point_count')}:"
+        f"{_summary_float(summary_metrics, 'negative_tail_window_selected_point_count')}",
+        f"tail slopes raw +/- = {raw_tail_slopes}",
+        f"tail slopes corr +/- = {corrected_tail_slopes}",
+        f"tail fit r^2 +/- = {tail_fit_r2}",
+        f"tail fit soft warn +/- = {tail_fit_soft_warnings}",
+        f"tail fit catastrophic +/- = {tail_fit_catastrophic}",
+        f"flatness gain +/- = {flatness_gain_pair}",
+        f"flatness gain score = {flatness_gain_score}",
+        "flatness gain balance = "
+        f"{_format_float(summary_metrics.get('background_flatness_gain_balance_score'))}",
         f"flatness gain balance ok = {summary_metrics.get('background_flatness_gain_balance_ok')}",
         f"soft override passed = {summary_metrics.get('background_soft_override_passed')}",
-        f"tail rescue attempted +/- = {summary_metrics.get('positive_tail_window_soft_r_squared_rescue_attempted')} / {summary_metrics.get('negative_tail_window_soft_r_squared_rescue_attempted')}",
-        f"tail rescue changed +/- = {summary_metrics.get('positive_tail_window_rescue_changed_selection')} / {summary_metrics.get('negative_tail_window_rescue_changed_selection')}",
-        f"tail slope symmetry = {_format_float(summary_metrics.get('background_tail_slope_symmetry_score'))}",
-        f"sat magnitude symmetry = {_format_float(summary_metrics.get('background_saturation_magnitude_symmetry_score'))}",
-        f"switching width raw/corr = {_format_float(summary_metrics.get('raw_switching_width_mT'))} / {_format_float(summary_metrics.get('corrected_switching_width_mT'))}",
-        f"zero crossings raw/corr = {_format_float(summary_metrics.get('raw_zero_crossing_candidate_count'))} / {_format_float(summary_metrics.get('corrected_zero_crossing_candidate_count'))}",
-        f"switching width rel change = {_format_float(summary_metrics.get('background_switching_width_relative_change'))}",
+        f"tail rescue attempted +/- = {tail_rescue_attempted}",
+        f"tail rescue changed +/- = {tail_rescue_changed}",
+        "tail slope symmetry = "
+        f"{_summary_float(summary_metrics, 'background_tail_slope_symmetry_score')}",
+        "sat magnitude symmetry = "
+        f"{_summary_float(summary_metrics, 'background_saturation_magnitude_symmetry_score')}",
+        f"switching width raw/corr = {switching_width}",
+        f"zero crossings raw/corr = {zero_crossings}",
+        "switching width rel change = "
+        f"{_summary_float(summary_metrics, 'background_switching_width_relative_change')}",
         f"center applied = {summary_metrics.get('centering_applied')}",
         f"secondary branch asymmetry = {_format_float(summary_metrics.get('branch_asymmetry'))}",
-        f"secondary switching complexity = {_format_float(summary_metrics.get('switching_complexity'))} ({summary_metrics.get('switching_complexity_label')})",
+        "secondary switching complexity = "
+        f"{_summary_float(summary_metrics, 'switching_complexity')} "
+        f"({summary_metrics.get('switching_complexity_label')})",
     ]
     ambiguity_flags = summary_metrics.get("ambiguity_flags", [])
     if ambiguity_flags:
@@ -910,6 +1137,51 @@ def _build_single_report_text(payload: dict[str, Any]) -> str:
     summary = payload["summary_metrics"]
     artifacts = payload.get("artifacts", {})
     trust = payload["analysis_payload"]["trust_diagnostics"]
+    raw_tail_slopes = _summary_pair(
+        summary,
+        "raw_plateau_slope_positive_normalized",
+        "raw_plateau_slope_negative_normalized",
+    )
+    corrected_tail_slopes = _summary_pair(
+        summary,
+        "corrected_plateau_slope_positive_normalized",
+        "corrected_plateau_slope_negative_normalized",
+    )
+    tail_fit_soft_warnings = _summary_raw_pair(
+        summary,
+        "positive_tail_fit_r_squared_soft_warning",
+        "negative_tail_fit_r_squared_soft_warning",
+    )
+    tail_fit_catastrophic = _summary_raw_pair(
+        summary,
+        "positive_tail_fit_r_squared_catastrophic",
+        "negative_tail_fit_r_squared_catastrophic",
+    )
+    tail_rescue_attempted = _summary_raw_pair(
+        summary,
+        "positive_tail_window_soft_r_squared_rescue_attempted",
+        "negative_tail_window_soft_r_squared_rescue_attempted",
+    )
+    tail_rescue_changed = _summary_raw_pair(
+        summary,
+        "positive_tail_window_rescue_changed_selection",
+        "negative_tail_window_rescue_changed_selection",
+    )
+    zero_crossings = _summary_pair(
+        summary,
+        "raw_zero_crossing_candidate_count",
+        "corrected_zero_crossing_candidate_count",
+    )
+    coercive_fields = _summary_pair(
+        summary,
+        "coercive_field_negative_mT",
+        "coercive_field_positive_mT",
+    )
+    saturation_moments = _summary_pair(
+        summary,
+        "saturation_moment_positive_emu",
+        "saturation_moment_negative_emu",
+    )
     lines = [
         f"# VSM Report: {summary['sample_id']}",
         "",
@@ -921,13 +1193,13 @@ def _build_single_report_text(payload: dict[str, Any]) -> str:
         "",
         "## Direct Observables",
         "",
-        f"- Ms: `{_format_float(summary.get('Ms_emu'))} +/- {_format_float(summary.get('ms_error'))}` emu",
-        f"- Mr: `{_format_float(summary.get('Mr_emu'))} +/- {_format_float(summary.get('mr_error'))}` emu",
-        f"- Hc: `{_format_float(summary.get('Hc_mT'))} +/- {_format_float(summary.get('hc_error'))}` mT",
-        f"- Squareness: `{_format_float(summary.get('squareness'))} +/- {_format_float(summary.get('squareness_error'))}`",
-        f"- Exchange bias: `{_format_float(summary.get('exchange_bias_mT'))} +/- {_format_float(summary.get('hex_error'))}` mT",
+        f"- Ms: `{_summary_pm(summary, 'Ms_emu', 'ms_error')}` emu",
+        f"- Mr: `{_summary_pm(summary, 'Mr_emu', 'mr_error')}` emu",
+        f"- Hc: `{_summary_pm(summary, 'Hc_mT', 'hc_error')}` mT",
+        f"- Squareness: `{_summary_pm(summary, 'squareness', 'squareness_error')}`",
+        f"- Exchange bias: `{_summary_pm(summary, 'exchange_bias_mT', 'hex_error')}` mT",
         f"- Vertical shift: `{_format_float(summary.get('vertical_shift_emu'))}` emu",
-        f"- Loop area: `{_format_float(summary.get('loop_area_emu_mT'))} +/- {_format_float(summary.get('loop_area_error'))}` emu*mT",
+        f"- Loop area: `{_summary_pm(summary, 'loop_area_emu_mT', 'loop_area_error')}` emu*mT",
         "",
         "## Trust Diagnostics",
         "",
@@ -937,37 +1209,61 @@ def _build_single_report_text(payload: dict[str, Any]) -> str:
         f"- Background decision reason: `{summary.get('background_decision_reason')}`",
         f"- Background QC passed: `{summary.get('background_qc_passed')}`",
         f"- Tail selection mode: `{summary.get('tail_window_selection_mode')}`",
-        f"- Tail window counts (+ init/selected, - init/selected): `{_format_float(summary.get('positive_tail_window_initial_point_count'))}` / `{_format_float(summary.get('positive_tail_window_selected_point_count'))}` / `{_format_float(summary.get('negative_tail_window_initial_point_count'))}` / `{_format_float(summary.get('negative_tail_window_selected_point_count'))}`",
-        f"- Raw residual tail slopes (+ / -): `{_format_float(summary.get('raw_plateau_slope_positive_normalized'))}` / `{_format_float(summary.get('raw_plateau_slope_negative_normalized'))}`",
-        f"- Corrected residual tail slopes (+ / -): `{_format_float(summary.get('corrected_plateau_slope_positive_normalized'))}` / `{_format_float(summary.get('corrected_plateau_slope_negative_normalized'))}`",
-        f"- Tail fit R^2 (+ / -): `{_format_float(summary.get('positive_tail_fit_r_squared'))}` / `{_format_float(summary.get('negative_tail_fit_r_squared'))}`",
-        f"- Tail fit soft warning (+ / -): `{summary.get('positive_tail_fit_r_squared_soft_warning')}` / `{summary.get('negative_tail_fit_r_squared_soft_warning')}`",
-        f"- Tail fit catastrophic (+ / -): `{summary.get('positive_tail_fit_r_squared_catastrophic')}` / `{summary.get('negative_tail_fit_r_squared_catastrophic')}`",
-        f"- Flatness gain (+ / - / score): `{_format_float(summary.get('background_flatness_gain_positive'))}` / `{_format_float(summary.get('background_flatness_gain_negative'))}` / `{_format_float(summary.get('background_flatness_gain_score'))}`",
-        f"- Flatness gain balance / ok / override: `{_format_float(summary.get('background_flatness_gain_balance_score'))}` / `{summary.get('background_flatness_gain_balance_ok')}` / `{summary.get('background_soft_override_passed')}`",
-        f"- Tail rescue attempted (+ / -): `{summary.get('positive_tail_window_soft_r_squared_rescue_attempted')}` / `{summary.get('negative_tail_window_soft_r_squared_rescue_attempted')}`",
-        f"- Tail rescue changed (+ / -): `{summary.get('positive_tail_window_rescue_changed_selection')}` / `{summary.get('negative_tail_window_rescue_changed_selection')}`",
-        f"- Corrected tail slope symmetry: `{_format_float(summary.get('background_tail_slope_symmetry_score'))}`",
-        f"- Corrected saturation magnitude symmetry: `{_format_float(summary.get('background_saturation_magnitude_symmetry_score'))}`",
-        f"- Switching width raw / corrected / rel change: `{_format_float(summary.get('raw_switching_width_mT'))}` / `{_format_float(summary.get('corrected_switching_width_mT'))}` / `{_format_float(summary.get('background_switching_width_relative_change'))}`",
-        f"- Zero crossing candidates raw / corrected: `{_format_float(summary.get('raw_zero_crossing_candidate_count'))}` / `{_format_float(summary.get('corrected_zero_crossing_candidate_count'))}`",
+        "- Tail window counts (+ init/selected, - init/selected): "
+        f"`{_summary_float(summary, 'positive_tail_window_initial_point_count')}` / "
+        f"`{_summary_float(summary, 'positive_tail_window_selected_point_count')}` / "
+        f"`{_summary_float(summary, 'negative_tail_window_initial_point_count')}` / "
+        f"`{_summary_float(summary, 'negative_tail_window_selected_point_count')}`",
+        f"- Raw residual tail slopes (+ / -): `{raw_tail_slopes}`",
+        f"- Corrected residual tail slopes (+ / -): `{corrected_tail_slopes}`",
+        "- Tail fit R^2 (+ / -): "
+        f"`{_summary_pair(summary, 'positive_tail_fit_r_squared', 'negative_tail_fit_r_squared')}`",
+        f"- Tail fit soft warning (+ / -): `{tail_fit_soft_warnings}`",
+        f"- Tail fit catastrophic (+ / -): `{tail_fit_catastrophic}`",
+        "- Flatness gain (+ / - / score): "
+        f"`{_summary_float(summary, 'background_flatness_gain_positive')}` / "
+        f"`{_summary_float(summary, 'background_flatness_gain_negative')}` / "
+        f"`{_summary_float(summary, 'background_flatness_gain_score')}`",
+        "- Flatness gain balance / ok / override: "
+        f"`{_summary_float(summary, 'background_flatness_gain_balance_score')}` / "
+        f"`{summary.get('background_flatness_gain_balance_ok')}` / "
+        f"`{summary.get('background_soft_override_passed')}`",
+        f"- Tail rescue attempted (+ / -): `{tail_rescue_attempted}`",
+        f"- Tail rescue changed (+ / -): `{tail_rescue_changed}`",
+        "- Corrected tail slope symmetry: "
+        f"`{_summary_float(summary, 'background_tail_slope_symmetry_score')}`",
+        "- Corrected saturation magnitude symmetry: "
+        f"`{_summary_float(summary, 'background_saturation_magnitude_symmetry_score')}`",
+        "- Switching width raw / corrected / rel change: "
+        f"`{_summary_float(summary, 'raw_switching_width_mT')}` / "
+        f"`{_summary_float(summary, 'corrected_switching_width_mT')}` / "
+        f"`{_summary_float(summary, 'background_switching_width_relative_change')}`",
+        f"- Zero crossing candidates raw / corrected: `{zero_crossings}`",
         f"- Background mode detail: `{trust['background_fit_details'].get('background_mode')}`",
         "",
         "## Secondary Diagnostics",
         "",
-        f"- Background score raw / corrected / delta: `{_format_float(summary.get('background_score_raw'))}` / `{_format_float(summary.get('background_score_corrected'))}` / `{_format_float(summary.get('background_score_delta'))}`",
+        "- Background score raw / corrected / delta: "
+        f"`{_summary_float(summary, 'background_score_raw')}` / "
+        f"`{_summary_float(summary, 'background_score_corrected')}` / "
+        f"`{_summary_float(summary, 'background_score_delta')}`",
         f"- Branch asymmetry: `{_format_float(summary.get('branch_asymmetry'))}`",
-        f"- Switching complexity: `{_format_float(summary.get('switching_complexity'))}` (`{summary.get('switching_complexity_label')}`)",
-        f"- Ambiguity flags: `{ '|'.join(summary.get('ambiguity_flags', [])) }`",
-        f"- Raw / corrected loop closure: `{_format_float(summary.get('raw_loop_closure_error'))}` / `{_format_float(summary.get('corrected_loop_closure_error'))}`",
+        "- Switching complexity: "
+        f"`{_summary_float(summary, 'switching_complexity')}` "
+        f"(`{summary.get('switching_complexity_label')}`)",
+        f"- Ambiguity flags: `{'|'.join(summary.get('ambiguity_flags', []))}`",
+        "- Raw / corrected loop closure: "
+        f"`{_summary_pair(summary, 'raw_loop_closure_error', 'corrected_loop_closure_error')}`",
         "",
         "## Detailed Fields",
         "",
-        f"- Hc- / Hc+: `{_format_float(summary.get('coercive_field_negative_mT'))}` / `{_format_float(summary.get('coercive_field_positive_mT'))}` mT",
-        f"- Mr+ / Mr-: `{_format_float(summary.get('remanence_positive_emu'))}` / `{_format_float(summary.get('remanence_negative_emu'))}` emu",
-        f"- Ms+ / Ms-: `{_format_float(summary.get('saturation_moment_positive_emu'))}` / `{_format_float(summary.get('saturation_moment_negative_emu'))}` emu",
-        f"- Ms tail scatter: `{_format_float(summary.get('ms_std_pos'))}` / `{_format_float(summary.get('ms_std_neg'))}` emu",
-        f"- Switching slopes: `{_format_float(summary.get('switching_slope_neg'))}` / `{_format_float(summary.get('switching_slope_pos'))}` emu/mT",
+        f"- Hc- / Hc+: `{coercive_fields}` mT",
+        "- Mr+ / Mr-: "
+        f"`{_summary_pair(summary, 'remanence_positive_emu', 'remanence_negative_emu')}` emu",
+        f"- Ms+ / Ms-: `{saturation_moments}` emu",
+        f"- Ms tail scatter: `{_summary_pair(summary, 'ms_std_pos', 'ms_std_neg')}` emu",
+        "- Switching slopes: "
+        f"`{_summary_pair(summary, 'switching_slope_neg', 'switching_slope_pos')}` emu/mT",
         "",
         "## Artifacts",
         "",
@@ -1011,7 +1307,8 @@ def _build_batch_report_text(payloads: list[dict[str, Any]]) -> str:
             [
                 f"### {series_id}",
                 "",
-                "| Temperature (K) | Replicate | Hc +/- err (mT) | Mr +/- err (emu) | Ms +/- err (emu) | Sat. Conf. | Ambiguity |",
+                "| Temperature (K) | Replicate | Hc +/- err (mT) | Mr +/- err (emu) | "
+                "Ms +/- err (emu) | Sat. Conf. | Ambiguity |",
                 "| --- | --- | --- | --- | --- | --- | --- |",
             ]
         )
@@ -1023,9 +1320,9 @@ def _build_batch_report_text(payloads: list[dict[str, Any]]) -> str:
                     [
                         _format_float(summary.get("temperature_k")),
                         str(summary.get("replicate_id") or ""),
-                        f"{_format_float(summary.get('Hc_mT'))} +/- {_format_float(summary.get('hc_error'))}",
-                        f"{_format_float(summary.get('Mr_emu'))} +/- {_format_float(summary.get('mr_error'))}",
-                        f"{_format_float(summary.get('Ms_emu'))} +/- {_format_float(summary.get('ms_error'))}",
+                        _summary_pm(summary, "Hc_mT", "hc_error"),
+                        _summary_pm(summary, "Mr_emu", "mr_error"),
+                        _summary_pm(summary, "Ms_emu", "ms_error"),
                         _format_float(summary.get("saturation_confidence")),
                         str(len(summary.get("ambiguity_flags", []))),
                     ]
@@ -1035,12 +1332,16 @@ def _build_batch_report_text(payloads: list[dict[str, Any]]) -> str:
         lines.extend(["", "Temperature trend:", ""])
         for payload in series_payloads:
             summary = payload["summary_metrics"]
+            h_c = _summary_pm(summary, "Hc_mT", "hc_error")
+            m_r = _summary_pm(summary, "Mr_emu", "mr_error")
+            m_s = _summary_pm(summary, "Ms_emu", "ms_error")
+            area = _summary_pm(summary, "loop_area_emu_mT", "loop_area_error")
             lines.append(
                 f"- `{_format_float(summary.get('temperature_k'))}` K: "
-                f"Hc=`{_format_float(summary.get('Hc_mT'))} +/- {_format_float(summary.get('hc_error'))}` mT, "
-                f"Mr=`{_format_float(summary.get('Mr_emu'))} +/- {_format_float(summary.get('mr_error'))}` emu, "
-                f"Ms=`{_format_float(summary.get('Ms_emu'))} +/- {_format_float(summary.get('ms_error'))}` emu, "
-                f"area=`{_format_float(summary.get('loop_area_emu_mT'))} +/- {_format_float(summary.get('loop_area_error'))}` emu*mT, "
+                f"Hc=`{h_c}` mT, "
+                f"Mr=`{m_r}` emu, "
+                f"Ms=`{m_s}` emu, "
+                f"area=`{area}` emu*mT, "
                 f"trust=`{_format_float(summary.get('saturation_confidence'))}`"
             )
         lines.append("")

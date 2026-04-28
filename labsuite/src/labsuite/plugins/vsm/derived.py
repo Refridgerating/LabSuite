@@ -53,8 +53,12 @@ def extract_loop_metrics(
 
     positive_tail = tail_mask & (field_mT > 0.0)
     negative_tail = tail_mask & (field_mT < 0.0)
-    positive_saturation = float(np.mean(moment_emu[positive_tail])) if np.any(positive_tail) else None
-    negative_saturation = float(np.mean(moment_emu[negative_tail])) if np.any(negative_tail) else None
+    positive_saturation = (
+        float(np.mean(moment_emu[positive_tail])) if np.any(positive_tail) else None
+    )
+    negative_saturation = (
+        float(np.mean(moment_emu[negative_tail])) if np.any(negative_tail) else None
+    )
     if positive_saturation is None:
         warnings.append("positive_saturation_unavailable")
     if negative_saturation is None:
@@ -63,11 +67,15 @@ def extract_loop_metrics(
     loop_shift = _pair_average(positive_coercive_field, negative_coercive_field)
     vertical_shift = _pair_average(positive_remanence, negative_remanence)
 
-    temperature_value = float(np.nanmean(temperature_k)) if np.any(np.isfinite(temperature_k)) else None
+    temperature_value = (
+        float(np.nanmean(temperature_k)) if np.any(np.isfinite(temperature_k)) else None
+    )
     metrics: dict[str, Any] = {
         "coercive_field_negative_mT": negative_coercive_field,
         "coercive_field_positive_mT": positive_coercive_field,
-        "coercive_field_mean_abs_mT": _pair_mean_abs(positive_coercive_field, negative_coercive_field),
+        "coercive_field_mean_abs_mT": _pair_mean_abs(
+            positive_coercive_field, negative_coercive_field
+        ),
         "loop_shift_mT": loop_shift,
         "remanence_positive_emu": positive_remanence,
         "remanence_negative_emu": negative_remanence,
@@ -80,11 +88,19 @@ def extract_loop_metrics(
         "min_corrected_moment_emu": float(np.min(moment_emu)),
         "point_count": int(moment_emu.size),
         "branch_count": len(branches),
-        "increasing_branch_count": sum(1 for branch in branches if branch.direction == "increasing"),
-        "decreasing_branch_count": sum(1 for branch in branches if branch.direction == "decreasing"),
+        "increasing_branch_count": sum(
+            1 for branch in branches if branch.direction == "increasing"
+        ),
+        "decreasing_branch_count": sum(
+            1 for branch in branches if branch.direction == "decreasing"
+        ),
         "temperature_k": temperature_value,
-        "selected_decreasing_branch_id": None if decreasing_branch is None else decreasing_branch.branch_id,
-        "selected_increasing_branch_id": None if increasing_branch is None else increasing_branch.branch_id,
+        "selected_decreasing_branch_id": None
+        if decreasing_branch is None
+        else decreasing_branch.branch_id,
+        "selected_increasing_branch_id": None
+        if increasing_branch is None
+        else increasing_branch.branch_id,
     }
     return metrics, warnings
 
@@ -140,26 +156,48 @@ def summarize_loop_quality(
     )
 
     full_moment_span = max(float(np.max(moment_emu) - np.min(moment_emu)), 1e-18)
-    positive_plateau_slope = _slope_from_indices(field_mT, moment_emu, np.asarray(positive_tail_indices, dtype=int))
-    negative_plateau_slope = _slope_from_indices(field_mT, moment_emu, np.asarray(negative_tail_indices, dtype=int))
+    positive_plateau_slope = _slope_from_indices(
+        field_mT, moment_emu, np.asarray(positive_tail_indices, dtype=int)
+    )
+    negative_plateau_slope = _slope_from_indices(
+        field_mT, moment_emu, np.asarray(negative_tail_indices, dtype=int)
+    )
     H_max_mT = max(float(np.max(np.abs(field_mT))), 1e-18)
     Ms_reference_emu = loop_metrics.get("saturation_moment_mean_abs_emu")
-    Ms_reference_emu = float(Ms_reference_emu) if Ms_reference_emu is not None else 0.5 * full_moment_span
+    Ms_reference_emu = (
+        float(Ms_reference_emu) if Ms_reference_emu is not None else 0.5 * full_moment_span
+    )
     plateau_slope_scale = max(abs(Ms_reference_emu) / H_max_mT, 1e-18)
     positive_plateau_slope_normalized = abs(positive_plateau_slope) / plateau_slope_scale
     negative_plateau_slope_normalized = abs(negative_plateau_slope) / plateau_slope_scale
-    positive_flatness_ratio = abs(positive_plateau_slope) * max(
-        float(np.ptp(field_mT[np.asarray(positive_tail_indices, dtype=int)])) if np.size(positive_tail_indices) else 0.0,
-        1.0,
-    ) / full_moment_span
-    negative_flatness_ratio = abs(negative_plateau_slope) * max(
-        float(np.ptp(field_mT[np.asarray(negative_tail_indices, dtype=int)])) if np.size(negative_tail_indices) else 0.0,
-        1.0,
-    ) / full_moment_span
+    positive_flatness_ratio = (
+        abs(positive_plateau_slope)
+        * max(
+            float(np.ptp(field_mT[np.asarray(positive_tail_indices, dtype=int)]))
+            if np.size(positive_tail_indices)
+            else 0.0,
+            1.0,
+        )
+        / full_moment_span
+    )
+    negative_flatness_ratio = (
+        abs(negative_plateau_slope)
+        * max(
+            float(np.ptp(field_mT[np.asarray(negative_tail_indices, dtype=int)]))
+            if np.size(negative_tail_indices)
+            else 0.0,
+            1.0,
+        )
+        / full_moment_span
+    )
     plateau_flatness_ratio = max(positive_flatness_ratio, negative_flatness_ratio)
     saturation_consistency_ratio = _relative_difference(
-        abs(loop_metrics.get("saturation_moment_positive_emu")) if loop_metrics.get("saturation_moment_positive_emu") is not None else None,
-        abs(loop_metrics.get("saturation_moment_negative_emu")) if loop_metrics.get("saturation_moment_negative_emu") is not None else None,
+        abs(loop_metrics.get("saturation_moment_positive_emu"))
+        if loop_metrics.get("saturation_moment_positive_emu") is not None
+        else None,
+        abs(loop_metrics.get("saturation_moment_negative_emu"))
+        if loop_metrics.get("saturation_moment_negative_emu") is not None
+        else None,
     )
     if max(abs(positive_plateau_slope_normalized), abs(negative_plateau_slope_normalized)) <= 1e-6:
         tail_slope_symmetry_score = 1.0
@@ -175,14 +213,20 @@ def summarize_loop_quality(
                 1.0,
             )
         )
-    saturation_magnitude_symmetry_score = float(np.clip(1.0 - saturation_consistency_ratio, 0.0, 1.0))
+    saturation_magnitude_symmetry_score = float(
+        np.clip(1.0 - saturation_consistency_ratio, 0.0, 1.0)
+    )
     switching_width_mT = _compute_switching_width(
         positive_coercive_field_mT=loop_metrics.get("coercive_field_positive_mT"),
         negative_coercive_field_mT=loop_metrics.get("coercive_field_negative_mT"),
     )
     switching_asymmetry_ratio = _relative_difference(
-        abs(loop_metrics.get("coercive_field_positive_mT")) if loop_metrics.get("coercive_field_positive_mT") is not None else None,
-        abs(loop_metrics.get("coercive_field_negative_mT")) if loop_metrics.get("coercive_field_negative_mT") is not None else None,
+        abs(loop_metrics.get("coercive_field_positive_mT"))
+        if loop_metrics.get("coercive_field_positive_mT") is not None
+        else None,
+        abs(loop_metrics.get("coercive_field_negative_mT"))
+        if loop_metrics.get("coercive_field_negative_mT") is not None
+        else None,
     )
     zero_crossing_candidate_count = int(
         coercive_ambiguity_components.get("positive_branch_zero_crossing_candidates", 0)
@@ -411,10 +455,12 @@ def _build_direct_observables(
     Ms_emu = detailed_metrics.get("saturation_moment_mean_abs_emu")
     Mr_emu = detailed_metrics.get("remanence_mean_abs_emu")
     Hc_mT = detailed_metrics.get("coercive_field_mean_abs_mT")
-    loop_area_emu_mT, loop_area_signed_emu_mT, overlap_start_mT, overlap_end_mT = _compute_loop_area(
-        field_mT,
-        moment_emu,
-        branches,
+    loop_area_emu_mT, loop_area_signed_emu_mT, overlap_start_mT, overlap_end_mT = (
+        _compute_loop_area(
+            field_mT,
+            moment_emu,
+            branches,
+        )
     )
     squareness = None
     if Ms_emu is not None and abs(Ms_emu) > 1e-18 and Mr_emu is not None:
@@ -447,8 +493,12 @@ def _build_uncertainty_estimates(
 ) -> dict[str, Any]:
     flags: list[str] = []
 
-    positive_tail_indices = np.asarray(background_details.get("selected_positive_indices", []), dtype=int)
-    negative_tail_indices = np.asarray(background_details.get("selected_negative_indices", []), dtype=int)
+    positive_tail_indices = np.asarray(
+        background_details.get("selected_positive_indices", []), dtype=int
+    )
+    negative_tail_indices = np.asarray(
+        background_details.get("selected_negative_indices", []), dtype=int
+    )
 
     positive_ms = _compute_tail_scatter_error(
         moment_emu=moment_emu,
@@ -607,10 +657,12 @@ def _build_trust_diagnostics(
         branches=branches,
         detailed_metrics=detailed_metrics,
     )
-    switching_complexity, switching_complexity_label, switching_complexity_components = _compute_switching_complexity(
-        field_mT=field_mT,
-        moment_emu=moment_emu,
-        branches=branches,
+    switching_complexity, switching_complexity_label, switching_complexity_components = (
+        _compute_switching_complexity(
+            field_mT=field_mT,
+            moment_emu=moment_emu,
+            branches=branches,
+        )
     )
     ambiguity_flags = _build_ambiguity_flags(
         detailed_metrics=detailed_metrics,
@@ -632,13 +684,19 @@ def _build_trust_diagnostics(
             "background_correction_accepted": background_details.get("correction_accepted"),
             "background_decision_reason": background_details.get("decision_reason"),
             "background_slope_mean_emu_per_mT": background_details.get("slope_emu_per_mT"),
-            "background_slope_positive_emu_per_mT": background_details.get("positive_slope_emu_per_mT"),
-            "background_slope_negative_emu_per_mT": background_details.get("negative_slope_emu_per_mT"),
+            "background_slope_positive_emu_per_mT": background_details.get(
+                "positive_slope_emu_per_mT"
+            ),
+            "background_slope_negative_emu_per_mT": background_details.get(
+                "negative_slope_emu_per_mT"
+            ),
             "background_intercept_positive_emu": background_details.get("positive_intercept_emu"),
             "background_intercept_negative_emu": background_details.get("negative_intercept_emu"),
             "positive_tail_flatness_ratio": background_qc.get("positive_tail_flatness_ratio"),
             "negative_tail_flatness_ratio": background_qc.get("negative_tail_flatness_ratio"),
-            "raw_tail_slope_disagreement_ratio": background_qc.get("raw_tail_slope_disagreement_ratio"),
+            "raw_tail_slope_disagreement_ratio": background_qc.get(
+                "raw_tail_slope_disagreement_ratio"
+            ),
             "background_score_raw": background_qc.get("score_raw"),
             "background_score_corrected": background_qc.get("score_corrected"),
             "background_score_delta": background_qc.get("score_delta"),
@@ -666,10 +724,12 @@ def _build_trust_diagnostics(
             "background_tail_slope_symmetry_score": background_qc.get("comparison", {}).get(
                 "background_tail_slope_symmetry_score"
             ),
-            "background_saturation_magnitude_symmetry_score": background_qc.get("comparison", {}).get(
-                "background_saturation_magnitude_symmetry_score"
+            "background_saturation_magnitude_symmetry_score": background_qc.get(
+                "comparison", {}
+            ).get("background_saturation_magnitude_symmetry_score"),
+            "raw_switching_width_mT": background_qc.get("comparison", {}).get(
+                "raw_switching_width_mT"
             ),
-            "raw_switching_width_mT": background_qc.get("comparison", {}).get("raw_switching_width_mT"),
             "corrected_switching_width_mT": background_qc.get("comparison", {}).get(
                 "corrected_switching_width_mT"
             ),
@@ -682,8 +742,12 @@ def _build_trust_diagnostics(
             "corrected_zero_crossing_candidate_count": background_qc.get("comparison", {}).get(
                 "corrected_zero_crossing_candidate_count"
             ),
-            "positive_tail_point_count": len(background_details.get("selected_positive_indices", [])),
-            "negative_tail_point_count": len(background_details.get("selected_negative_indices", [])),
+            "positive_tail_point_count": len(
+                background_details.get("selected_positive_indices", [])
+            ),
+            "negative_tail_point_count": len(
+                background_details.get("selected_negative_indices", [])
+            ),
         },
         "ambiguity_flags": ambiguity_flags,
         "branch_asymmetry": branch_asymmetry,
@@ -722,8 +786,12 @@ def _compute_loop_area(
         overlap_x = np.unique(
             np.concatenate(
                 [
-                    increasing_field[(increasing_field >= overlap_start) & (increasing_field <= overlap_end)],
-                    decreasing_field[(decreasing_field >= overlap_start) & (decreasing_field <= overlap_end)],
+                    increasing_field[
+                        (increasing_field >= overlap_start) & (increasing_field <= overlap_end)
+                    ],
+                    decreasing_field[
+                        (decreasing_field >= overlap_start) & (decreasing_field <= overlap_end)
+                    ],
                     np.asarray([overlap_start, overlap_end], dtype=float),
                 ]
             )
@@ -753,7 +821,9 @@ def _compute_saturation_confidence(
 
     positive_flatness_ratio = float(background_qc.get("positive_tail_flatness_ratio") or 0.0)
     negative_flatness_ratio = float(background_qc.get("negative_tail_flatness_ratio") or 0.0)
-    flatness_tolerance = max(float(background_details.get("positive_tail_flatness_ratio_tolerance", 0.08) or 0.08), 1e-18)
+    flatness_tolerance = max(
+        float(background_details.get("positive_tail_flatness_ratio_tolerance", 0.08) or 0.08), 1e-18
+    )
     flatness_penalty = max(positive_flatness_ratio, negative_flatness_ratio) / flatness_tolerance
     flatness_score = float(np.clip(1.0 - flatness_penalty, 0.0, 1.0))
 
@@ -762,9 +832,13 @@ def _compute_saturation_confidence(
         float(background_details.get("raw_tail_slope_disagreement_ratio_tolerance", 0.35) or 0.35),
         1e-18,
     )
-    slope_consistency_score = float(np.clip(1.0 - slope_disagreement_ratio / slope_disagreement_tolerance, 0.0, 1.0))
+    slope_consistency_score = float(
+        np.clip(1.0 - slope_disagreement_ratio / slope_disagreement_tolerance, 0.0, 1.0)
+    )
 
-    score = float(np.mean([availability_score, background_qc_score, flatness_score, slope_consistency_score]))
+    score = float(
+        np.mean([availability_score, background_qc_score, flatness_score, slope_consistency_score])
+    )
     return score, {
         "availability_score": availability_score,
         "background_qc_score": background_qc_score,
@@ -844,14 +918,18 @@ def _compute_switching_complexity(
         label = "moderate"
     else:
         label = "complex"
-    return score, label, {
-        "branch_count": branch_count,
-        "extra_branch_component": extra_branch_component,
-        "zero_crossing_candidates": zero_crossing_candidates,
-        "zero_crossing_component": zero_crossing_component,
-        "switching_peak_count": switching_peak_count,
-        "multistep_component": multistep_component,
-    }
+    return (
+        score,
+        label,
+        {
+            "branch_count": branch_count,
+            "extra_branch_component": extra_branch_component,
+            "zero_crossing_candidates": zero_crossing_candidates,
+            "zero_crossing_component": zero_crossing_component,
+            "switching_peak_count": switching_peak_count,
+            "multistep_component": multistep_component,
+        },
+    )
 
 
 def _build_ambiguity_flags(
@@ -868,7 +946,10 @@ def _build_ambiguity_flags(
     flags: list[str] = list(dict.fromkeys(str(warning) for warning in warnings))
     if direct_observables.get("loop_area_emu_mT") is None:
         flags.append("loop_area_unavailable")
-    if direct_observables.get("Ms_emu") is None or abs(direct_observables.get("Ms_emu") or 0.0) <= 1e-18:
+    if (
+        direct_observables.get("Ms_emu") is None
+        or abs(direct_observables.get("Ms_emu") or 0.0) <= 1e-18
+    ):
         flags.append("low_saturation_signal")
     if direct_observables.get("Hc_mT") is None:
         flags.append("unstable_zero_crossing")
@@ -973,10 +1054,14 @@ def _compute_coercive_crossing_ambiguity(
     positive_candidates = 0
     negative_candidates = 0
     if increasing_branch is not None:
-        increasing_field, increasing_moment = _branch_arrays(field_mT, moment_emu, increasing_branch)
+        increasing_field, increasing_moment = _branch_arrays(
+            field_mT, moment_emu, increasing_branch
+        )
         positive_candidates = _count_zero_crossing_candidates(increasing_field, increasing_moment)
     if decreasing_branch is not None:
-        decreasing_field, decreasing_moment = _branch_arrays(field_mT, moment_emu, decreasing_branch)
+        decreasing_field, decreasing_moment = _branch_arrays(
+            field_mT, moment_emu, decreasing_branch
+        )
         negative_candidates = _count_zero_crossing_candidates(decreasing_field, decreasing_moment)
 
     ambiguity_count = max(positive_candidates - 1, 0) + max(negative_candidates - 1, 0)
@@ -1044,7 +1129,9 @@ def _compute_tail_scatter_error(
     if values.size >= 2 and std is not None:
         error = float(std / np.sqrt(values.size))
     else:
-        error, used_instrument_fallback = _estimate_instrument_standard_error(std_err_values, values.size)
+        error, used_instrument_fallback = _estimate_instrument_standard_error(
+            std_err_values, values.size
+        )
         if error is None:
             flags.append(f"missing_tail_scatter_{label}")
 
@@ -1081,9 +1168,13 @@ def _compute_zero_intercept_uncertainty(
             "flags": [f"missing_primary_{label}_branch_for_mr_uncertainty"],
         }
 
-    branch_field, branch_moment, branch_std = _branch_arrays_with_std(field_mT, moment_emu, moment_std_err_emu, branch)
-    branch_field, branch_moment, branch_std = _sorted_unique_xy_std(branch_field, branch_moment, branch_std)
-    if branch_field.size < 2 or 0.0 < float(branch_field[0]) or 0.0 > float(branch_field[-1]):
+    branch_field, branch_moment, branch_std = _branch_arrays_with_std(
+        field_mT, moment_emu, moment_std_err_emu, branch
+    )
+    branch_field, branch_moment, branch_std = _sorted_unique_xy_std(
+        branch_field, branch_moment, branch_std
+    )
+    if branch_field.size < 2 or float(branch_field[0]) > 0.0 or float(branch_field[-1]) < 0.0:
         return {
             "error": None,
             "noise": None,
@@ -1151,9 +1242,15 @@ def _compute_zero_crossing_uncertainty(
             "flags": [f"unstable_zero_crossing_{label}_hc"],
         }
 
-    branch_field, branch_moment, branch_std = _branch_arrays_with_std(field_mT, moment_emu, moment_std_err_emu, branch)
-    branch_field, branch_moment, branch_std = _sorted_unique_xy_std(branch_field, branch_moment, branch_std)
-    local_indices = _select_local_indices(branch_field, crossing_value_mT, half_width_mT, min_points)
+    branch_field, branch_moment, branch_std = _branch_arrays_with_std(
+        field_mT, moment_emu, moment_std_err_emu, branch
+    )
+    branch_field, branch_moment, branch_std = _sorted_unique_xy_std(
+        branch_field, branch_moment, branch_std
+    )
+    local_indices = _select_local_indices(
+        branch_field, crossing_value_mT, half_width_mT, min_points
+    )
     local_x = np.asarray(branch_field[local_indices], dtype=float)
     local_y = np.asarray(branch_moment[local_indices], dtype=float)
     local_std = np.asarray(branch_std[local_indices], dtype=float)
@@ -1208,14 +1305,18 @@ def _compute_loop_area_error(
     variants: dict[str, float | None] = {
         "nominal_union_grid": base_loop_area_emu_mT,
     }
-    dense_area, _, _, _ = _compute_loop_area(field_mT, moment_emu, branches, grid_mode="dense", grid_points=128)
+    dense_area, _, _, _ = _compute_loop_area(
+        field_mT, moment_emu, branches, grid_mode="dense", grid_points=128
+    )
     variants["dense_grid"] = dense_area
 
     smoothed_moment = _smooth_for_loop_area(moment_emu, recipe)
     if smoothed_moment is None:
         variants["smoothed_union_grid"] = None
     else:
-        smoothed_area, _, _, _ = _compute_loop_area(field_mT, smoothed_moment, branches, grid_mode="union")
+        smoothed_area, _, _, _ = _compute_loop_area(
+            field_mT, smoothed_moment, branches, grid_mode="union"
+        )
         variants["smoothed_union_grid"] = smoothed_area
 
     valid_values = [float(value) for value in variants.values() if value is not None]
@@ -1225,7 +1326,9 @@ def _compute_loop_area_error(
     return float(np.std(valid_values, ddof=1) * recipe.uncertainty_scale), variants, []
 
 
-def _smooth_for_loop_area(moment_emu: np.ndarray, recipe: VsmPreprocessingRecipe) -> np.ndarray | None:
+def _smooth_for_loop_area(
+    moment_emu: np.ndarray, recipe: VsmPreprocessingRecipe
+) -> np.ndarray | None:
     window = int(recipe.uncertainty_loop_area_smoothing_window)
     if window % 2 == 0:
         window += 1
@@ -1241,7 +1344,9 @@ def _smooth_for_loop_area(moment_emu: np.ndarray, recipe: VsmPreprocessingRecipe
     )
 
 
-def _estimate_local_noise(values: np.ndarray, std_err_values: np.ndarray) -> tuple[float | None, bool]:
+def _estimate_local_noise(
+    values: np.ndarray, std_err_values: np.ndarray
+) -> tuple[float | None, bool]:
     values = np.asarray(values, dtype=float)
     if values.size >= 2:
         empirical_noise = float(np.std(values, ddof=1))
@@ -1250,7 +1355,9 @@ def _estimate_local_noise(values: np.ndarray, std_err_values: np.ndarray) -> tup
     return _estimate_instrument_standard_error(std_err_values, values.size)
 
 
-def _estimate_instrument_standard_error(std_err_values: np.ndarray, point_count: int) -> tuple[float | None, bool]:
+def _estimate_instrument_standard_error(
+    std_err_values: np.ndarray, point_count: int
+) -> tuple[float | None, bool]:
     finite_std = np.asarray(std_err_values, dtype=float)
     finite_std = finite_std[np.isfinite(finite_std) & (finite_std > 0.0)]
     if finite_std.size == 0 or point_count <= 0:
@@ -1258,7 +1365,9 @@ def _estimate_instrument_standard_error(std_err_values: np.ndarray, point_count:
     return float(np.sqrt(np.sum(finite_std**2)) / point_count), True
 
 
-def _select_local_indices(x: np.ndarray, center: float, half_width: float, min_points: int) -> np.ndarray:
+def _select_local_indices(
+    x: np.ndarray, center: float, half_width: float, min_points: int
+) -> np.ndarray:
     x = np.asarray(x, dtype=float)
     indices = np.flatnonzero(np.abs(x - center) <= half_width)
     if indices.size >= min_points:
@@ -1275,7 +1384,12 @@ def _compute_ratio_error(
     numerator_error: float | None,
     denominator_error: float | None,
 ) -> float | None:
-    if numerator is None or denominator is None or numerator_error is None or denominator_error is None:
+    if (
+        numerator is None
+        or denominator is None
+        or numerator_error is None
+        or denominator_error is None
+    ):
         return None
     if abs(denominator) <= 1e-18:
         return None
@@ -1333,5 +1447,9 @@ def _slope_from_indices(field_mT: np.ndarray, moment_emu: np.ndarray, indices: n
     indices = np.asarray(indices, dtype=int)
     if indices.size < 2:
         return 0.0
-    coefficients = np.polyfit(np.asarray(field_mT[indices], dtype=float), np.asarray(moment_emu[indices], dtype=float), deg=1)
+    coefficients = np.polyfit(
+        np.asarray(field_mT[indices], dtype=float),
+        np.asarray(moment_emu[indices], dtype=float),
+        deg=1,
+    )
     return float(coefficients[0])

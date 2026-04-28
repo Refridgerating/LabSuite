@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 from labsuite.core.export import export_analysis_csv, export_analysis_figure
 from labsuite.plugins.esr.serialization import (
@@ -59,7 +60,9 @@ def summarize_esr_analysis(analysis) -> dict[str, Any]:
         "fit_local_disagreement_flag": analysis.fit_local_disagreement_flag,
         "fit_local_disagreement_reason": analysis.fit_local_disagreement_reason,
         "resonance_metrics_mode_count": len(getattr(analysis, "resonance_metrics", [])),
-        "resonance_metrics_failure_count": sum(1 for item in getattr(analysis, "resonance_metrics", []) if not item.success),
+        "resonance_metrics_failure_count": sum(
+            1 for item in getattr(analysis, "resonance_metrics", []) if not item.success
+        ),
     }
 
 
@@ -75,11 +78,15 @@ def summarize_fmr_analysis(analysis) -> dict[str, Any]:
     return dict(analysis.summary_metrics)
 
 
-def export_esr_bundle_from_json(analysis_json_path: Path, output_dir: Path | None = None) -> dict[str, Path]:
+def export_esr_bundle_from_json(
+    analysis_json_path: Path, output_dir: Path | None = None
+) -> dict[str, Path]:
     """Regenerate ESR CSV and figure exports from a saved JSON result."""
 
     analysis = load_esr_analysis_result(analysis_json_path)
-    destination_dir = output_dir.resolve() if output_dir is not None else analysis_json_path.resolve().parent
+    destination_dir = (
+        output_dir.resolve() if output_dir is not None else analysis_json_path.resolve().parent
+    )
     destination_dir.mkdir(parents=True, exist_ok=True)
     stem = analysis.dataset.source_path.stem
     csv_path = destination_dir / f"{stem}_trace.csv"
@@ -95,19 +102,25 @@ def export_esr_bundle_from_json(analysis_json_path: Path, output_dir: Path | Non
     }
 
 
-def build_esr_report_entry(input_path: Path, output_path: Path | None = None, recursive: bool = True) -> Path:
+def build_esr_report_entry(
+    input_path: Path, output_path: Path | None = None, recursive: bool = True
+) -> Path:
     """Wrap ESR report generation for the registry."""
 
     return build_esr_report(input_path, output_path=output_path, recursive=recursive)
 
 
-def build_vsm_report_entry(input_path: Path, output_path: Path | None = None, recursive: bool = True) -> Path:
+def build_vsm_report_entry(
+    input_path: Path, output_path: Path | None = None, recursive: bool = True
+) -> Path:
     """Wrap VSM report generation for the registry."""
 
     return build_vsm_report(input_path, output_path=output_path, recursive=recursive)
 
 
-def build_fmr_report_entry(input_path: Path, output_path: Path | None = None, recursive: bool = True) -> Path:
+def build_fmr_report_entry(
+    input_path: Path, output_path: Path | None = None, recursive: bool = True
+) -> Path:
     """Wrap FMR report generation for the registry."""
 
     return build_fmr_report(input_path, output_path=output_path, recursive=recursive)

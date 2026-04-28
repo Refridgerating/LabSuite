@@ -4,14 +4,16 @@ from __future__ import annotations
 
 import csv
 import json
-from dataclasses import dataclass, field
+from collections.abc import Callable, Sequence
+from dataclasses import dataclass, field, replace
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Callable, Sequence
+from typing import Any
 
 from labsuite.core.exceptions import LabSuiteError, WorkflowError
 from labsuite.core.resonance_metrics import ResonanceMetricsConfig, flatten_resonance_metrics
-from labsuite.core.sample_registry import RegistryResolutionError
+from labsuite.core.sample_registry import RegistryResolutionError, RegistryWorkflowOptions
+from labsuite.workflows.raw_import import RawImportResult, import_raw_for_ledger
 from labsuite.workflows.single_file import WorkflowArtifacts
 
 
@@ -45,6 +47,7 @@ class BatchRunResult:
     resonance_metrics_csv_path: Path | None = None
     unresolved_items: list[BatchItemResult] = field(default_factory=list)
     unresolved_csv_path: Path | None = None
+    raw_import_map_path: Path | None = None
 
 
 def discover_source_files(
@@ -69,7 +72,8 @@ def discover_source_files(
             if resolved_input.suffix.lower() not in allowed_suffixes:
                 suffix_list = ", ".join(sorted(allowed_suffixes))
                 raise WorkflowError(
-                    f"Direct file input must be a {source_label} source with one of suffixes {suffix_list}: {resolved_input.name}"
+                    f"Direct file input must be a {source_label} source with one of "
+                    f"suffixes {suffix_list}: {resolved_input.name}"
                 )
             discovered.add(resolved_input)
             continue
@@ -83,7 +87,9 @@ def discover_source_files(
 
     sources = sorted(discovered, key=lambda path: str(path).lower())
     if not sources:
-        raise WorkflowError(f"No {source_label} source files were discovered for the provided inputs.")
+        raise WorkflowError(
+            f"No {source_label} source files were discovered for the provided inputs."
+        )
     return sources
 
 
@@ -155,16 +161,106 @@ def run_batch_workflow(
     successful_analyses: list[Any] = []
     item_output_dirs = _build_item_output_dirs(output_dir, discovered_sources)
     resolved_recipe = recipe_path.resolve()
-    options = workflow_options or {}
+    options = dict(workflow_options or {})
+    metadata_by_source = options.pop("metadata_by_source", None)
+    raw_import_modality = options.pop("raw_import_modality", None)
+    raw_import_root = options.pop("raw_import_root", None)
+    raw_import_records: list[RawImportResult] = []
 
     for source_path in discovered_sources:
         item_output_dir = item_output_dirs[source_path]
+        analysis_source_path = source_path
+        import_result = RawImportResult(
+            original_path=source_path,
+            imported_path=source_path,
+            copied=False,
+            status="unchanged",
+            message="ledger update disabled",
+        )
+        base_registry_options = options.get("registry_options")
+        if (
+            isinstance(base_registry_options, RegistryWorkflowOptions)
+            and base_registry_options.update_ledger
+            and raw_import_modality
+            and raw_import_root
+        ):
+            try:
+                import_result = import_raw_for_ledger(
+                    source_path,
+                    modality=raw_import_modality,
+                    raw_import_root=Path(raw_import_root),
+                )
+                raw_import_records.append(import_result)
+                analysis_source_path = import_result.imported_path
+            except WorkflowError as exc:
+                raw_import_records.append(
+                    RawImportResult(
+                        original_path=source_path,
+                        imported_path=source_path,
+                        copied=False,
+                        status="failed",
+                        message=str(exc),
+                    )
+                )
+                failed_items.append(
+                    BatchItemResult(
+                        source_path=source_path,
+                        status="failed",
+                        error_message=str(exc),
+                        output_dir=item_output_dir,
+                        json_path=None,
+                        csv_path=None,
+                        summary_csv_path=None,
+                        figure_path=None,
+                    )
+                )
+                continue
+        item_options = dict(options)
+        registry_options = item_options.get("registry_options")
+        if isinstance(registry_options, RegistryWorkflowOptions):
+            registry_options = replace(
+                registry_options,
+                original_source_path=import_result.original_path
+                if import_result.original_path != import_result.imported_path
+                else None,
+                raw_import_copied=import_result.copied,
+                raw_import_sidecars=list(import_result.copied_sidecars),
+                raw_import_message=import_result.message,
+            )
+            item_options["registry_options"] = registry_options
+        if isinstance(registry_options, RegistryWorkflowOptions) and isinstance(
+            metadata_by_source, dict
+        ):
+            metadata = metadata_by_source.get(
+                str(source_path.resolve()).lower()
+            ) or metadata_by_source.get(str(analysis_source_path.resolve()).lower())
+            if metadata is not None:
+                item_options["registry_options"] = replace(
+                    registry_options,
+                    sample_id=metadata.get("sample_id") or registry_options.sample_id,
+                    measurement_id=metadata.get("measurement_id")
+                    or registry_options.measurement_id,
+                    geometry=metadata.get("geometry") or registry_options.geometry,
+                    branch_labels=metadata.get("branch_labels") or registry_options.branch_labels,
+                )
+                registry_options = item_options["registry_options"]
+        if (
+            isinstance(registry_options, RegistryWorkflowOptions)
+            and registry_options.update_ledger
+            and registry_options.sample_id
+            and not registry_options.measurement_id
+            and raw_import_modality
+        ):
+            item_options["registry_options"] = replace(
+                registry_options,
+                measurement_id=f"{raw_import_modality}:{registry_options.sample_id}:{analysis_source_path.stem}",
+            )
         try:
             analysis, artifacts = run_single_workflow(
-                source_path=source_path,
+                source_path=analysis_source_path,
                 recipe_path=resolved_recipe,
                 output_dir=item_output_dir,
-                **options,
+                **item_options,
             )
         except RegistryResolutionError as exc:
             unresolved_items.append(
@@ -197,7 +293,7 @@ def run_batch_workflow(
 
         succeeded_items.append(
             BatchItemResult(
-                source_path=source_path,
+                source_path=analysis_source_path,
                 status="success",
                 error_message=None,
                 output_dir=item_output_dir,
@@ -210,10 +306,18 @@ def run_batch_workflow(
         )
         successful_analyses.append(analysis)
 
-    batch_figure_paths = {} if export_batch_figure is None else export_batch_figure(successful_analyses, output_dir)
-    resonance_metrics_csv_path = _maybe_export_batch_resonance_metrics(successful_analyses, output_dir, options)
+    batch_figure_paths = (
+        {} if export_batch_figure is None else export_batch_figure(successful_analyses, output_dir)
+    )
+    resonance_metrics_csv_path = _maybe_export_batch_resonance_metrics(
+        successful_analyses, output_dir, options
+    )
     unresolved_csv_path = _maybe_write_unresolved_csv(unresolved_items, output_dir)
-    all_items = sorted([*succeeded_items, *failed_items, *unresolved_items], key=lambda item: str(item.source_path).lower())
+    raw_import_map_path = _maybe_write_raw_import_map(raw_import_records, output_dir)
+    all_items = sorted(
+        [*succeeded_items, *failed_items, *unresolved_items],
+        key=lambda item: str(item.source_path).lower(),
+    )
     summary_csv_path, manifest_json_path = write_batch_outputs(
         inputs=resolved_inputs,
         pattern=pattern,
@@ -223,6 +327,7 @@ def run_batch_workflow(
         batch_figure_paths=batch_figure_paths,
         resonance_metrics_csv_path=resonance_metrics_csv_path,
         unresolved_csv_path=unresolved_csv_path,
+        raw_import_map_path=raw_import_map_path,
     )
     return BatchRunResult(
         discovered_sources=discovered_sources,
@@ -235,6 +340,7 @@ def run_batch_workflow(
         resonance_metrics_csv_path=resonance_metrics_csv_path,
         unresolved_items=unresolved_items,
         unresolved_csv_path=unresolved_csv_path,
+        raw_import_map_path=raw_import_map_path,
     )
 
 
@@ -248,6 +354,7 @@ def write_batch_outputs(
     batch_figure_paths: dict[str, Path],
     resonance_metrics_csv_path: Path | None = None,
     unresolved_csv_path: Path | None = None,
+    raw_import_map_path: Path | None = None,
 ) -> tuple[Path, Path]:
     """Write batch summary and manifest artifacts for a completed run."""
 
@@ -263,6 +370,7 @@ def write_batch_outputs(
         batch_figure_paths=batch_figure_paths,
         resonance_metrics_csv_path=resonance_metrics_csv_path,
         unresolved_csv_path=unresolved_csv_path,
+        raw_import_map_path=raw_import_map_path,
         destination=manifest_json_path,
     )
     return summary_csv_path, manifest_json_path
@@ -327,11 +435,11 @@ def _write_batch_manifest_json(
     batch_figure_paths: dict[str, Path],
     resonance_metrics_csv_path: Path | None,
     unresolved_csv_path: Path | None,
+    raw_import_map_path: Path | None,
     destination: Path,
 ) -> None:
     serialized_batch_figures = {
-        name: str(path)
-        for name, path in sorted(batch_figure_paths.items())
+        name: str(path) for name, path in sorted(batch_figure_paths.items())
     }
     batch_figure_png = None
     if len(serialized_batch_figures) == 1:
@@ -345,8 +453,11 @@ def _write_batch_manifest_json(
         "output_dir": str(output_dir),
         "batch_figures": serialized_batch_figures,
         "batch_figure_png": batch_figure_png,
-        "batch_resonance_metrics_csv": None if resonance_metrics_csv_path is None else str(resonance_metrics_csv_path),
+        "batch_resonance_metrics_csv": None
+        if resonance_metrics_csv_path is None
+        else str(resonance_metrics_csv_path),
         "unresolved_files_csv": None if unresolved_csv_path is None else str(unresolved_csv_path),
+        "raw_import_map_csv": None if raw_import_map_path is None else str(raw_import_map_path),
         "items": [
             {
                 "source_file": str(item.source_path),
@@ -355,7 +466,9 @@ def _write_batch_manifest_json(
                 "output_dir": str(item.output_dir),
                 "analysis_json": None if item.json_path is None else str(item.json_path),
                 "trace_csv": None if item.csv_path is None else str(item.csv_path),
-                "summary_csv": None if item.summary_csv_path is None else str(item.summary_csv_path),
+                "summary_csv": None
+                if item.summary_csv_path is None
+                else str(item.summary_csv_path),
                 "figure_png": None if item.figure_path is None else str(item.figure_path),
                 "summary_metrics": item.summary_metrics,
             }
@@ -386,6 +499,37 @@ def _maybe_write_unresolved_csv(items: Sequence[BatchItemResult], output_dir: Pa
                     "status": item.status,
                     "error_message": item.error_message,
                     "output_dir": str(item.output_dir),
+                }
+            )
+    return destination
+
+
+def _maybe_write_raw_import_map(items: Sequence[RawImportResult], output_dir: Path) -> Path | None:
+    if not items:
+        return None
+    destination = output_dir / "raw_import_map.csv"
+    with destination.open("w", encoding="utf-8", newline="") as handle:
+        writer = csv.DictWriter(
+            handle,
+            fieldnames=[
+                "original_raw_path",
+                "imported_raw_path",
+                "copied",
+                "copied_sidecars",
+                "status",
+                "message",
+            ],
+        )
+        writer.writeheader()
+        for item in items:
+            writer.writerow(
+                {
+                    "original_raw_path": str(item.original_path),
+                    "imported_raw_path": str(item.imported_path),
+                    "copied": item.copied,
+                    "copied_sidecars": "|".join(str(path) for path in item.copied_sidecars),
+                    "status": item.status,
+                    "message": item.message,
                 }
             )
     return destination

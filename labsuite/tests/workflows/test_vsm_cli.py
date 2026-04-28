@@ -38,19 +38,37 @@ def test_vsm_single_exports_all_artifacts(tmp_path, project_root, vsm_sample_fil
     payload = json.loads(json_path.read_text(encoding="utf-8"))
     assert payload["measurement"]["modality"] == "vsm"
     assert payload["summary_metrics"]["sample_id"] == "MTJ-B"
-    assert payload["analysis_payload"]["background_fit"]["combined_background"]["slope_emu_per_mT"] is not None
-    assert payload["analysis_payload"]["background_fit"]["combined_background"]["background_mode"] in {
+    assert (
+        payload["analysis_payload"]["background_fit"]["combined_background"]["slope_emu_per_mT"]
+        is not None
+    )
+    assert payload["analysis_payload"]["background_fit"]["combined_background"][
+        "background_mode"
+    ] in {
         "none",
         "slope_only",
         "rejected",
     }
-    assert payload["analysis_payload"]["background_fit"]["positive_tail_fit"]["parameters"]["slope_emu_per_mT"] is not None
-    assert payload["analysis_payload"]["background_fit"]["negative_tail_fit"]["parameters"]["slope_emu_per_mT"] is not None
+    assert (
+        payload["analysis_payload"]["background_fit"]["positive_tail_fit"]["parameters"][
+            "slope_emu_per_mT"
+        ]
+        is not None
+    )
+    assert (
+        payload["analysis_payload"]["background_fit"]["negative_tail_fit"]["parameters"][
+            "slope_emu_per_mT"
+        ]
+        is not None
+    )
     assert payload["analysis_payload"]["centering"]["applied"] is False
     assert len(payload["analysis_payload"]["branches"]) >= 3
     assert payload["plot_manifest"]["figure_type"] == "vsm_loop_diagnostic"
     assert payload["summary_metrics"]["background_mode"] in {"none", "slope_only", "rejected"}
-    assert payload["summary_metrics"]["background_subtraction_mode"] == payload["summary_metrics"]["background_mode"]
+    assert (
+        payload["summary_metrics"]["background_subtraction_mode"]
+        == payload["summary_metrics"]["background_mode"]
+    )
     assert payload["summary_metrics"]["Ms_emu"] is not None
     assert payload["summary_metrics"]["Mr_emu"] is not None
     assert payload["summary_metrics"]["Hc_mT"] is not None
@@ -59,7 +77,10 @@ def test_vsm_single_exports_all_artifacts(tmp_path, project_root, vsm_sample_fil
     assert payload["summary_metrics"]["hc_error"] is not None
     assert payload["summary_metrics"]["hex_error"] is not None
     assert payload["summary_metrics"]["squareness_error"] is not None
-    assert payload["summary_metrics"]["exchange_bias_mT"] == payload["summary_metrics"]["loop_shift_mT"]
+    assert (
+        payload["summary_metrics"]["exchange_bias_mT"]
+        == payload["summary_metrics"]["loop_shift_mT"]
+    )
     assert payload["summary_metrics"]["loop_area_emu_mT"] is not None
     assert payload["summary_metrics"]["loop_area_error"] is not None
     assert payload["summary_metrics"]["saturation_confidence"] is not None
@@ -123,7 +144,9 @@ def test_vsm_single_exports_all_artifacts(tmp_path, project_root, vsm_sample_fil
     assert "warnings" in summary_header
 
 
-def test_vsm_batch_export_and_report_workflows(tmp_path, project_root, vsm_sample_files, capsys) -> None:
+def test_vsm_batch_export_and_report_workflows(
+    tmp_path, project_root, vsm_sample_files, capsys
+) -> None:
     source_dir = vsm_sample_files[0].parent
     recipe_path = project_root / "recipes" / "vsm" / "default.yaml"
     batch_dir = tmp_path / "vsm_batch"
@@ -148,7 +171,10 @@ def test_vsm_batch_export_and_report_workflows(tmp_path, project_root, vsm_sampl
     assert (batch_dir / "batch_hysteresis_overlay.png").exists()
     assert (batch_dir / "batch_hysteresis_overlay.png").stat().st_size > 0
     output = capsys.readouterr().out
-    assert f"Batch figure [batch_hysteresis_overlay]: {batch_dir / 'batch_hysteresis_overlay.png'}" in output
+    assert (
+        f"Batch figure [batch_hysteresis_overlay]: {batch_dir / 'batch_hysteresis_overlay.png'}"
+        in output
+    )
 
     manifest = json.loads((batch_dir / "batch_manifest.json").read_text(encoding="utf-8"))
     assert manifest["succeeded_count"] == len(vsm_sample_files)
@@ -156,7 +182,9 @@ def test_vsm_batch_export_and_report_workflows(tmp_path, project_root, vsm_sampl
     assert manifest["batch_figures"] == {
         "batch_hysteresis_overlay": str((batch_dir / "batch_hysteresis_overlay.png").resolve())
     }
-    assert manifest["batch_figure_png"] == str((batch_dir / "batch_hysteresis_overlay.png").resolve())
+    assert manifest["batch_figure_png"] == str(
+        (batch_dir / "batch_hysteresis_overlay.png").resolve()
+    )
 
     first_json = batch_dir / vsm_sample_files[0].stem / f"{vsm_sample_files[0].stem}_analysis.json"
     export_dir = tmp_path / "vsm_export"
@@ -216,7 +244,9 @@ def test_vsm_batch_export_and_report_workflows(tmp_path, project_root, vsm_sampl
     assert "Sat. Conf." in batch_text
 
 
-def test_esr_modality_single_command_matches_legacy_artifacts(tmp_path, project_root, write_bruker_esr_sample) -> None:
+def test_esr_modality_single_command_matches_legacy_artifacts(
+    tmp_path, project_root, write_bruker_esr_sample
+) -> None:
     source_file = write_bruker_esr_sample(tmp_path / "generic_esr_trace.dsc")
     output_dir = tmp_path / "generic_esr"
     recipe_path = project_root / "recipes" / "esr" / "default.yaml"
@@ -241,7 +271,9 @@ def test_esr_modality_single_command_matches_legacy_artifacts(tmp_path, project_
     assert (output_dir / "generic_esr_trace_figure.png").exists()
 
 
-def test_vsm_batch_summary_contains_grouping_metadata(tmp_path, project_root, vsm_sample_files) -> None:
+def test_vsm_batch_summary_contains_grouping_metadata(
+    tmp_path, project_root, vsm_sample_files
+) -> None:
     source_dir = vsm_sample_files[0].parent
     recipe_path = project_root / "recipes" / "vsm" / "default.yaml"
     batch_dir = tmp_path / "vsm_batch_summary"
@@ -262,7 +294,9 @@ def test_vsm_batch_summary_contains_grouping_metadata(tmp_path, project_root, vs
     )
     assert exit_code == 0
 
-    rows = list(csv.DictReader((batch_dir / "batch_summary.csv").open("r", encoding="utf-8", newline="")))
+    rows = list(
+        csv.DictReader((batch_dir / "batch_summary.csv").open("r", encoding="utf-8", newline=""))
+    )
     assert len(rows) == len(vsm_sample_files)
     assert all(row["sample_id"] == "MTJ-B" for row in rows)
     assert all(row["replicate_id"] == "R1" for row in rows)

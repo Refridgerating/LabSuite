@@ -4,8 +4,11 @@ import numpy as np
 
 from labsuite.core.measurement_models import FitResult
 from labsuite.core.recipes import load_vsm_recipe
-from labsuite.plugins.vsm.preprocess import _evaluate_background_mode, fit_background_slope, split_vsm_branches
-
+from labsuite.plugins.vsm.preprocess import (
+    _evaluate_background_mode,
+    fit_background_slope,
+    split_vsm_branches,
+)
 
 TAIL_SELECTION_METADATA = {
     "tail_window_selection_mode": "iterative_shrink",
@@ -76,7 +79,11 @@ def _fit_stub(slope: float, r_squared: float, point_count: int) -> FitResult:
     return FitResult(
         model_name="linear_tail_fit",
         parameters={"slope_emu_per_mT": slope, "intercept_emu": 0.0},
-        metrics={"r_squared": r_squared, "rmse_emu": 1.0e-7, "selected_point_count": float(point_count)},
+        metrics={
+            "r_squared": r_squared,
+            "rmse_emu": 1.0e-7,
+            "selected_point_count": float(point_count),
+        },
         success=True,
         message="ok",
         selected_indices=list(range(point_count)),
@@ -86,7 +93,9 @@ def _fit_stub(slope: float, r_squared: float, point_count: int) -> FitResult:
     )
 
 
-def test_fit_background_slope_unit_accepts_clean_linear_background(project_root, build_vsm_loop_arrays) -> None:
+def test_fit_background_slope_unit_accepts_clean_linear_background(
+    project_root, build_vsm_loop_arrays
+) -> None:
     recipe = load_vsm_recipe(project_root / "recipes" / "vsm" / "default.yaml")
     loop = build_vsm_loop_arrays(background_slope_emu_per_mT=2.0e-7)
     branch_ids, branches = split_vsm_branches(loop["field_mT"])
@@ -105,13 +114,20 @@ def test_fit_background_slope_unit_accepts_clean_linear_background(project_root,
     assert tail_masks["combined_tail_mask"].any()
     assert background_fit["combined_background"]["background_mode"] == "slope_only"
     assert background_fit["combined_background"]["correction_accepted"] is True
-    assert qc["comparison"]["background_flatness_gain_score"] >= recipe.background_min_flatness_gain_score
+    assert (
+        qc["comparison"]["background_flatness_gain_score"]
+        >= recipe.background_min_flatness_gain_score
+    )
     assert qc["tail_window_selection_mode"] == "iterative_shrink"
-    assert np.allclose(loop_variants["final_moment_emu"], loop_variants["slope_corrected_moment_emu"])
+    assert np.allclose(
+        loop_variants["final_moment_emu"], loop_variants["slope_corrected_moment_emu"]
+    )
     assert not warnings
 
 
-def test_fit_background_slope_unit_adaptively_shrinks_curved_tail_window(project_root, build_vsm_loop_arrays) -> None:
+def test_fit_background_slope_unit_adaptively_shrinks_curved_tail_window(
+    project_root, build_vsm_loop_arrays
+) -> None:
     recipe = load_vsm_recipe(project_root / "recipes" / "vsm" / "default.yaml")
     loop = build_vsm_loop_arrays(
         background_slope_emu_per_mT=2.0e-7,
@@ -131,15 +147,25 @@ def test_fit_background_slope_unit_adaptively_shrinks_curved_tail_window(project
 
     qc = background_fit["combined_background"]["qc"]
     assert background_fit["combined_background"]["background_mode"] == "slope_only"
-    assert qc["positive_tail_window_selected_point_count"] < qc["positive_tail_window_initial_point_count"]
-    assert qc["negative_tail_window_selected_point_count"] < qc["negative_tail_window_initial_point_count"]
+    assert (
+        qc["positive_tail_window_selected_point_count"]
+        < qc["positive_tail_window_initial_point_count"]
+    )
+    assert (
+        qc["negative_tail_window_selected_point_count"]
+        < qc["negative_tail_window_initial_point_count"]
+    )
     assert qc["positive_tail_fit_r_squared"] >= recipe.background_tail_fit_min_r_squared
     assert qc["negative_tail_fit_r_squared"] >= recipe.background_tail_fit_min_r_squared
-    assert np.allclose(loop_variants["final_moment_emu"], loop_variants["slope_corrected_moment_emu"])
+    assert np.allclose(
+        loop_variants["final_moment_emu"], loop_variants["slope_corrected_moment_emu"]
+    )
     assert not warnings
 
 
-def test_fit_background_slope_unit_returns_none_for_negligible_slope(project_root, build_vsm_loop_arrays) -> None:
+def test_fit_background_slope_unit_returns_none_for_negligible_slope(
+    project_root, build_vsm_loop_arrays
+) -> None:
     recipe = load_vsm_recipe(project_root / "recipes" / "vsm" / "default.yaml")
     loop = build_vsm_loop_arrays(background_slope_emu_per_mT=0.0)
     _branch_ids, branches = split_vsm_branches(loop["field_mT"])
@@ -154,12 +180,17 @@ def test_fit_background_slope_unit_returns_none_for_negligible_slope(project_roo
     )
 
     assert background_fit["combined_background"]["background_mode"] == "none"
-    assert background_fit["combined_background"]["decision_reason"] == "slope_below_meaningful_threshold"
+    assert (
+        background_fit["combined_background"]["decision_reason"]
+        == "slope_below_meaningful_threshold"
+    )
     assert np.allclose(loop_variants["final_moment_emu"], loop_variants["uncorrected_moment_emu"])
     assert "background_fit_optional_slope_below_meaningful_threshold" in warnings
 
 
-def test_evaluate_background_mode_returns_none_for_one_sided_plateau_regression(monkeypatch, project_root) -> None:
+def test_evaluate_background_mode_returns_none_for_one_sided_plateau_regression(
+    monkeypatch, project_root
+) -> None:
     recipe = load_vsm_recipe(project_root / "recipes" / "vsm" / "default.yaml")
     field_mT = np.linspace(-100.0, 100.0, 81, dtype=float)
     positive_indices = np.flatnonzero(field_mT > 80.0)
@@ -207,7 +238,9 @@ def test_evaluate_background_mode_returns_none_for_one_sided_plateau_regression(
     )
 
     calls = iter([raw_metrics, corrected_metrics])
-    monkeypatch.setattr("labsuite.plugins.vsm.preprocess.summarize_loop_quality", lambda **_kwargs: next(calls))
+    monkeypatch.setattr(
+        "labsuite.plugins.vsm.preprocess.summarize_loop_quality", lambda **_kwargs: next(calls)
+    )
 
     fit = _fit_stub(2.0e-7, 0.98, positive_indices.size)
     evaluation, warnings = _evaluate_background_mode(
@@ -278,7 +311,9 @@ def test_evaluate_background_mode_rejects_extra_zero_crossings(monkeypatch, proj
     )
 
     calls = iter([raw_metrics, corrected_metrics])
-    monkeypatch.setattr("labsuite.plugins.vsm.preprocess.summarize_loop_quality", lambda **_kwargs: next(calls))
+    monkeypatch.setattr(
+        "labsuite.plugins.vsm.preprocess.summarize_loop_quality", lambda **_kwargs: next(calls)
+    )
 
     fit = _fit_stub(2.0e-7, 0.98, positive_indices.size)
     evaluation, warnings = _evaluate_background_mode(
@@ -301,7 +336,9 @@ def test_evaluate_background_mode_rejects_extra_zero_crossings(monkeypatch, proj
     assert "background_fit_rejected_corrected_zero_crossings_increased" in warnings
 
 
-def test_evaluate_background_mode_poor_r_squared_but_negligible_slope_is_none(monkeypatch, project_root) -> None:
+def test_evaluate_background_mode_poor_r_squared_but_negligible_slope_is_none(
+    monkeypatch, project_root
+) -> None:
     recipe = load_vsm_recipe(project_root / "recipes" / "vsm" / "default.yaml")
     field_mT = np.linspace(-100.0, 100.0, 81, dtype=float)
     positive_indices = np.flatnonzero(field_mT > 80.0)
@@ -328,7 +365,9 @@ def test_evaluate_background_mode_poor_r_squared_but_negligible_slope_is_none(mo
         saturation_consistency_ratio=0.04,
     )
     calls = iter([raw_metrics, raw_metrics])
-    monkeypatch.setattr("labsuite.plugins.vsm.preprocess.summarize_loop_quality", lambda **_kwargs: next(calls))
+    monkeypatch.setattr(
+        "labsuite.plugins.vsm.preprocess.summarize_loop_quality", lambda **_kwargs: next(calls)
+    )
 
     poor_fit = _fit_stub(1.0e-8, 0.1, positive_indices.size)
     evaluation, _warnings = _evaluate_background_mode(
@@ -349,7 +388,9 @@ def test_evaluate_background_mode_poor_r_squared_but_negligible_slope_is_none(mo
     assert evaluation["decision_reason"] == "slope_below_meaningful_threshold"
 
 
-def test_evaluate_background_mode_soft_r_squared_warning_can_be_overridden(monkeypatch, project_root) -> None:
+def test_evaluate_background_mode_soft_r_squared_warning_can_be_overridden(
+    monkeypatch, project_root
+) -> None:
     recipe = load_vsm_recipe(project_root / "recipes" / "vsm" / "default.yaml")
     field_mT = np.linspace(-100.0, 100.0, 81, dtype=float)
     positive_indices = np.flatnonzero(field_mT > 80.0)
@@ -396,7 +437,9 @@ def test_evaluate_background_mode_soft_r_squared_warning_can_be_overridden(monke
         saturation_consistency_ratio=0.02,
     )
     calls = iter([raw_metrics, corrected_metrics])
-    monkeypatch.setattr("labsuite.plugins.vsm.preprocess.summarize_loop_quality", lambda **_kwargs: next(calls))
+    monkeypatch.setattr(
+        "labsuite.plugins.vsm.preprocess.summarize_loop_quality", lambda **_kwargs: next(calls)
+    )
 
     borderline_fit = _fit_stub(2.0e-7, 0.4, positive_indices.size)
     evaluation, warnings = _evaluate_background_mode(
@@ -422,7 +465,9 @@ def test_evaluate_background_mode_soft_r_squared_warning_can_be_overridden(monke
     assert "background_fit_warning_soft_tail_fit_r_squared_overridden" in warnings
 
 
-def test_evaluate_background_mode_soft_r_squared_warning_with_low_positive_gain_is_none(monkeypatch, project_root) -> None:
+def test_evaluate_background_mode_soft_r_squared_warning_with_low_positive_gain_is_none(
+    monkeypatch, project_root
+) -> None:
     recipe = load_vsm_recipe(project_root / "recipes" / "vsm" / "default.yaml")
     field_mT = np.linspace(-100.0, 100.0, 81, dtype=float)
     positive_indices = np.flatnonzero(field_mT > 80.0)
@@ -450,9 +495,9 @@ def test_evaluate_background_mode_soft_r_squared_warning_with_low_positive_gain_
     )
     corrected_metrics = _loop_quality_stub(
         slope_pos=1.3e-7,
-        slope_neg=1.3e-7,
-        slope_pos_norm=0.35,
-        slope_neg_norm=0.35,
+        slope_neg=0.1e-7,
+        slope_pos_norm=0.46,
+        slope_neg_norm=0.01,
         Ms_pos=3.42e-5,
         Ms_neg=-3.45e-5,
         tail_slope_symmetry_score=0.99,
@@ -469,7 +514,9 @@ def test_evaluate_background_mode_soft_r_squared_warning_with_low_positive_gain_
         saturation_consistency_ratio=0.02,
     )
     calls = iter([raw_metrics, corrected_metrics])
-    monkeypatch.setattr("labsuite.plugins.vsm.preprocess.summarize_loop_quality", lambda **_kwargs: next(calls))
+    monkeypatch.setattr(
+        "labsuite.plugins.vsm.preprocess.summarize_loop_quality", lambda **_kwargs: next(calls)
+    )
 
     borderline_fit = _fit_stub(2.0e-7, 0.4, positive_indices.size)
     evaluation, warnings = _evaluate_background_mode(
@@ -487,9 +534,14 @@ def test_evaluate_background_mode_soft_r_squared_warning_with_low_positive_gain_
     )
 
     assert evaluation["background_mode"] == "none"
-    assert evaluation["decision_reason"] == "soft_tail_fit_r_squared_not_overridden_low_positive_gain"
+    assert (
+        evaluation["decision_reason"] == "soft_tail_fit_r_squared_not_overridden_low_positive_gain"
+    )
     assert evaluation["background_soft_override_passed"] is False
-    assert "background_fit_optional_soft_tail_fit_r_squared_not_overridden_low_positive_gain" in warnings
+    assert (
+        "background_fit_optional_soft_tail_fit_r_squared_not_overridden_low_positive_gain"
+        in warnings
+    )
 
 
 def test_evaluate_background_mode_soft_r_squared_warning_with_unbalanced_tail_gains_is_none(
@@ -541,7 +593,9 @@ def test_evaluate_background_mode_soft_r_squared_warning_with_unbalanced_tail_ga
         saturation_consistency_ratio=0.02,
     )
     calls = iter([raw_metrics, corrected_metrics])
-    monkeypatch.setattr("labsuite.plugins.vsm.preprocess.summarize_loop_quality", lambda **_kwargs: next(calls))
+    monkeypatch.setattr(
+        "labsuite.plugins.vsm.preprocess.summarize_loop_quality", lambda **_kwargs: next(calls)
+    )
 
     borderline_fit = _fit_stub(2.0e-7, 0.4, positive_indices.size)
     evaluation, warnings = _evaluate_background_mode(
@@ -559,9 +613,15 @@ def test_evaluate_background_mode_soft_r_squared_warning_with_unbalanced_tail_ga
     )
 
     assert evaluation["background_mode"] == "none"
-    assert evaluation["decision_reason"] == "soft_tail_fit_r_squared_not_overridden_unbalanced_tail_gains"
+    assert (
+        evaluation["decision_reason"]
+        == "soft_tail_fit_r_squared_not_overridden_unbalanced_tail_gains"
+    )
     assert evaluation["background_flatness_gain_balance_ok"] is False
-    assert "background_fit_optional_soft_tail_fit_r_squared_not_overridden_unbalanced_tail_gains" in warnings
+    assert (
+        "background_fit_optional_soft_tail_fit_r_squared_not_overridden_unbalanced_tail_gains"
+        in warnings
+    )
 
 
 def test_evaluate_background_mode_catastrophic_r_squared_with_meaningful_slope_is_rejected(
@@ -593,7 +653,9 @@ def test_evaluate_background_mode_catastrophic_r_squared_with_meaningful_slope_i
         saturation_consistency_ratio=0.04,
     )
     calls = iter([raw_metrics, raw_metrics])
-    monkeypatch.setattr("labsuite.plugins.vsm.preprocess.summarize_loop_quality", lambda **_kwargs: next(calls))
+    monkeypatch.setattr(
+        "labsuite.plugins.vsm.preprocess.summarize_loop_quality", lambda **_kwargs: next(calls)
+    )
 
     catastrophic_fit = _fit_stub(2.0e-7, 0.1, positive_indices.size)
     evaluation, warnings = _evaluate_background_mode(

@@ -17,7 +17,7 @@ from labsuite.plugins.esr.batch_qc import (
 from labsuite.plugins.esr.service import analyze_esr_file
 
 
-def test_parse_esr_batch_identity_groups_duplicate_runs_by_sample_replicate_angle_and_frequency() -> None:
+def test_parse_esr_batch_identity_groups_duplicate_runs() -> None:
     identity = parse_esr_batch_identity(
         Path("20260220_150301857_Temp2-MTJ-D-0,5nm-Pillars-65deg-R1-0,05mT-10mW-100kHz-1min.dsc"),
         {"bruker": {"frequency_GHz": 9.49889673634545}},
@@ -108,7 +108,9 @@ def test_compute_esr_qc_metrics_rejects_missing_second_peak(
             {"amplitude": 0.9, "center_mT": 345.0, "gamma_mT": 1.1, "offset": 0.0},
         ],
     )
-    analysis = analyze_esr_file(source_file, project_root / "recipes" / "esr" / "default.yaml", fit_mode="split")
+    analysis = analyze_esr_file(
+        source_file, project_root / "recipes" / "esr" / "default.yaml", fit_mode="split"
+    )
     analysis.peak_fits = analysis.peak_fits[:1]
     recipe = load_esr_recipe(project_root / "recipes" / "esr" / "default.yaml")
 

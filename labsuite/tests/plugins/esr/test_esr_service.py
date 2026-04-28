@@ -6,6 +6,11 @@ import pytest
 from lmfit import Parameters
 
 from labsuite.core.exceptions import ParseError, WorkflowError
+from labsuite.core.export.figure_export import (
+    _integrated_curve_series,
+    _plotted_integrated_curves,
+    export_analysis_figure,
+)
 from labsuite.core.preprocessing import scalar_integral
 from labsuite.core.types import (
     ConvergenceSummary,
@@ -15,25 +20,25 @@ from labsuite.core.types import (
     ProcessedTrace,
     ResidualSummary,
 )
-from labsuite.plugins.esr.fitters import _build_bound_hits, _build_parameter_diagnostics
-from labsuite.core.export.figure_export import (
-    _integrated_curve_series,
-    _plotted_integrated_curves,
-    export_analysis_figure,
-)
-from labsuite.plugins.esr.parser import parse_esr_file
 from labsuite.plugins.esr import service as esr_service
 from labsuite.plugins.esr.fitters import (
+    _build_bound_hits,
+    _build_parameter_diagnostics,
     absorption_lorentzian,
     derivative_lorentzian,
+)
+from labsuite.plugins.esr.fitters import (
     fit_derivative_lorentzian_in_window as fit_derivative_lorentzian_in_window_impl,
 )
+from labsuite.plugins.esr.parser import parse_esr_file
 from labsuite.plugins.esr.preprocess import integrate_local_resonance_with_curves
 from labsuite.plugins.esr.service import analyze_esr_file
 
 
 def test_esr_service_analyzes_single_file(tmp_path, project_root, write_bruker_esr_sample) -> None:
-    source_file = write_bruker_esr_sample(tmp_path / "service_trace.dsc", center_mT=339.8, gamma_mT=1.05)
+    source_file = write_bruker_esr_sample(
+        tmp_path / "service_trace.dsc", center_mT=339.8, gamma_mT=1.05
+    )
     recipe_path = project_root / "recipes" / "esr" / "default.yaml"
 
     result = analyze_esr_file(source_file, recipe_path)
@@ -58,9 +63,14 @@ def test_esr_service_analyzes_single_file(tmp_path, project_root, write_bruker_e
     assert result.single_fit.residual_summary.rmse >= 0.0
     assert result.single_fit.feature_summary is not None
     assert result.single_fit.feature_summary.integrated_intensity_proxy is not None
-    assert result.single_fit.feature_summary.integrated_intensity_proxy == pytest.approx(result.total_integral.area_integral)
+    assert result.single_fit.feature_summary.integrated_intensity_proxy == pytest.approx(
+        result.total_integral.area_integral
+    )
     assert result.single_fit.derived["intensity_method"] == "fit_derived_lorentzian_area_integral"
-    assert result.single_fit.derived["local_windowed_intensity_proxy"] == result.local_total_integral.area_integral
+    assert (
+        result.single_fit.derived["local_windowed_intensity_proxy"]
+        == result.local_total_integral.area_integral
+    )
     assert result.diagnostic_total_integral.area_integral is not None
     expected_absorption = absorption_lorentzian(
         result.processed.field_mT,
@@ -70,13 +80,19 @@ def test_esr_service_analyzes_single_file(tmp_path, project_root, write_bruker_e
     )
     assert np.allclose(result.primary_integrated.absorption_signal, expected_absorption)
     assert result.total_integral.area_integral == pytest.approx(
-        scalar_integral(result.primary_integrated.field_mT, result.primary_integrated.absorption_signal)
+        scalar_integral(
+            result.primary_integrated.field_mT, result.primary_integrated.absorption_signal
+        )
     )
     assert result.fit_local_total_integral.integration_kind == "fit_local_windowed_model"
     if result.fit_local_integrated is not None:
         fit_local_mask = ~np.isnan(result.fit_local_integrated.absorption_signal)
-        assert result.fit_local_integrated.start_field_mT == pytest.approx(result.fit_local_total_integral.start_field_mT)
-        assert result.fit_local_integrated.end_field_mT == pytest.approx(result.fit_local_total_integral.end_field_mT)
+        assert result.fit_local_integrated.start_field_mT == pytest.approx(
+            result.fit_local_total_integral.start_field_mT
+        )
+        assert result.fit_local_integrated.end_field_mT == pytest.approx(
+            result.fit_local_total_integral.end_field_mT
+        )
         assert np.all(np.isnan(result.fit_local_integrated.absorption_signal[~fit_local_mask]))
         assert np.all(np.isnan(result.fit_local_integrated.area_signal[~fit_local_mask]))
         assert result.fit_local_total_integral.area_integral == pytest.approx(
@@ -87,8 +103,12 @@ def test_esr_service_analyzes_single_file(tmp_path, project_root, write_bruker_e
         )
     if result.local_integrated is not None:
         local_mask = ~np.isnan(result.local_integrated.absorption_signal)
-        assert result.local_integrated.start_field_mT == pytest.approx(result.local_total_integral.start_field_mT)
-        assert result.local_integrated.end_field_mT == pytest.approx(result.local_total_integral.end_field_mT)
+        assert result.local_integrated.start_field_mT == pytest.approx(
+            result.local_total_integral.start_field_mT
+        )
+        assert result.local_integrated.end_field_mT == pytest.approx(
+            result.local_total_integral.end_field_mT
+        )
         assert np.all(np.isnan(result.local_integrated.absorption_signal[~local_mask]))
         assert np.all(np.isnan(result.local_integrated.area_signal[~local_mask]))
     assert result.fit_local_disagreement_flag is False
@@ -97,10 +117,14 @@ def test_esr_service_analyzes_single_file(tmp_path, project_root, write_bruker_e
     assert len(result.resonance_metrics) == 1
     assert result.resonance_metrics[0].success is True
     assert result.resonance_metrics[0].owner_id == "selected"
-    assert result.resonance_metrics[0].hres == pytest.approx(result.single_fit.parameters["center_mT"])
+    assert result.resonance_metrics[0].hres == pytest.approx(
+        result.single_fit.parameters["center_mT"]
+    )
 
 
-def test_esr_service_selects_split_mode_for_double_peak(tmp_path, project_root, write_bruker_esr_sample) -> None:
+def test_esr_service_selects_split_mode_for_double_peak(
+    tmp_path, project_root, write_bruker_esr_sample
+) -> None:
     source_file = write_bruker_esr_sample(
         tmp_path / "double_trace.dsc",
         components=[
@@ -135,7 +159,10 @@ def test_esr_service_selects_split_mode_for_double_peak(tmp_path, project_root, 
     assert all(peak.fit.metrics["r_squared"] > 0.9 for peak in result.peak_fits)
     assert all(peak.fit.feature_summary is not None for peak in result.peak_fits)
     assert all(peak.fit.residual_summary.rmse >= 0.0 for peak in result.peak_fits)
-    assert all(peak.fit.feature_summary.integrated_intensity_proxy == pytest.approx(integral.area_integral) for peak, integral in zip(result.peak_fits, result.peak_integrals, strict=True))
+    assert all(
+        peak.fit.feature_summary.integrated_intensity_proxy == pytest.approx(integral.area_integral)
+        for peak, integral in zip(result.peak_fits, result.peak_integrals, strict=True)
+    )
     assert {item.owner_id for item in result.resonance_metrics} == {"peak_1", "peak_2"}
 
 
@@ -236,7 +263,10 @@ def test_esr_service_suppresses_split_local_diagnostics_when_component_window_is
     assert result.fit_local_disagreement_ratio is None
     assert result.fit_local_disagreement_reason is not None
     assert "split_local_diagnostic_unavailable" in result.fit_local_disagreement_reason
-    assert "overlaps_detected_resonance" in result.fit_local_disagreement_reason or "boundary_truncated_baseline" in result.fit_local_disagreement_reason
+    assert (
+        "overlaps_detected_resonance" in result.fit_local_disagreement_reason
+        or "boundary_truncated_baseline" in result.fit_local_disagreement_reason
+    )
     assert any(peak.fit.derived.get("local_diagnostic_reason") for peak in result.peak_fits)
 
 
@@ -250,7 +280,9 @@ def test_export_analysis_figure_places_legends_below_each_subplot(
             {"amplitude": 0.9, "center_mT": 348.1, "gamma_mT": 1.35, "offset": 0.0},
         ],
     )
-    result = analyze_esr_file(source_file, project_root / "recipes" / "esr" / "default.yaml", fit_mode="split")
+    result = analyze_esr_file(
+        source_file, project_root / "recipes" / "esr" / "default.yaml", fit_mode="split"
+    )
     destination = tmp_path / "legend_trace_figure.png"
     closed_figures: list[object] = []
 
@@ -294,7 +326,9 @@ def test_export_analysis_figure_places_legends_below_each_subplot(
     diagnostic_lines = [
         line
         for line in footer_text.splitlines()
-        if "qc detail:" in line or "split_local_diagnostic_unavailable" in line or "boundary_truncated_baseline" in line
+        if "qc detail:" in line
+        or "split_local_diagnostic_unavailable" in line
+        or "boundary_truncated_baseline" in line
     ]
     assert len(diagnostic_lines) >= 2
 
@@ -306,8 +340,12 @@ def test_export_analysis_figure_places_legends_below_each_subplot(
     plt.close(figure)
 
 
-def test_forced_split_mode_rejects_single_peak(tmp_path, project_root, write_bruker_esr_sample) -> None:
-    source_file = write_bruker_esr_sample(tmp_path / "single_trace.dsc", center_mT=339.8, gamma_mT=1.05)
+def test_forced_split_mode_rejects_single_peak(
+    tmp_path, project_root, write_bruker_esr_sample
+) -> None:
+    source_file = write_bruker_esr_sample(
+        tmp_path / "single_trace.dsc", center_mT=339.8, gamma_mT=1.05
+    )
     recipe_path = project_root / "recipes" / "esr" / "default.yaml"
 
     with pytest.raises(WorkflowError, match="two valid peak windows"):
@@ -356,7 +394,14 @@ def test_bruker_csv_matches_native_axis_but_not_raw_signal(bruker_sample_stem) -
     dataset = parse_esr_file(bruker_sample_stem.with_suffix(".dsc"))
     csv_path = bruker_sample_stem.with_suffix(".csv")
     lines = csv_path.read_text(encoding="utf-8").splitlines()
-    start = next(index for index, line in enumerate(lines) if line.strip() == "BField [mT];MW_Absorption []") + 1
+    start = (
+        next(
+            index
+            for index, line in enumerate(lines)
+            if line.strip() == "BField [mT];MW_Absorption []"
+        )
+        + 1
+    )
     csv_data = np.loadtxt(lines[start:], delimiter=";")
 
     assert csv_data.shape[0] == dataset.field_mT.size
@@ -396,7 +441,9 @@ def test_parameter_diagnostics_capture_bound_hits_and_missing_stderr() -> None:
 def test_esr_service_uses_fallback_single_fit_and_retains_rejected_global_attempt(
     tmp_path, project_root, write_bruker_esr_sample, monkeypatch
 ) -> None:
-    source_file = write_bruker_esr_sample(tmp_path / "fallback_trace.dsc", center_mT=339.8, gamma_mT=1.0)
+    source_file = write_bruker_esr_sample(
+        tmp_path / "fallback_trace.dsc", center_mT=339.8, gamma_mT=1.0
+    )
     recipe_path = project_root / "recipes" / "esr" / "default.yaml"
 
     def _bad_global_fit(trace, *, integrated_intensity_proxy=None):
@@ -429,7 +476,9 @@ def test_esr_service_uses_fallback_single_fit_and_retains_rejected_global_attemp
     assert result.total_integral.area_integral is not None
     assert result.primary_integrated is not None
     if result.local_integrated is not None:
-        assert result.local_integrated.start_field_mT == pytest.approx(result.local_total_integral.start_field_mT)
+        assert result.local_integrated.start_field_mT == pytest.approx(
+            result.local_total_integral.start_field_mT
+        )
 
     plotted_curves, absorption_title, area_title = _plotted_integrated_curves(result)
     assert plotted_curves is result.primary_integrated
@@ -443,7 +492,9 @@ def test_esr_service_uses_fallback_single_fit_and_retains_rejected_global_attemp
 def test_esr_service_records_failed_fallback_attempt_and_unavailable_primary_integral(
     tmp_path, project_root, write_bruker_esr_sample, monkeypatch
 ) -> None:
-    source_file = write_bruker_esr_sample(tmp_path / "failed_fallback_trace.dsc", center_mT=339.8, gamma_mT=1.0)
+    source_file = write_bruker_esr_sample(
+        tmp_path / "failed_fallback_trace.dsc", center_mT=339.8, gamma_mT=1.0
+    )
     recipe_path = project_root / "recipes" / "esr" / "default.yaml"
 
     def _bad_fit(trace, *, integrated_intensity_proxy=None):
@@ -457,7 +508,9 @@ def test_esr_service_records_failed_fallback_attempt_and_unavailable_primary_int
         )
 
     monkeypatch.setattr(esr_service, "fit_derivative_lorentzian", _bad_fit)
-    monkeypatch.setattr(esr_service, "fit_derivative_lorentzian_in_window", lambda trace, window: _bad_fit(trace))
+    monkeypatch.setattr(
+        esr_service, "fit_derivative_lorentzian_in_window", lambda trace, window: _bad_fit(trace)
+    )
 
     result = analyze_esr_file(source_file, recipe_path)
 
@@ -491,7 +544,9 @@ def test_esr_service_flags_fit_local_disagreement_without_replacing_primary_outp
 
     def _distorted_local(*args, **kwargs):
         summary, curves = real_integrate(*args, **kwargs)
-        summary.area_integral = None if summary.area_integral is None else summary.area_integral * 0.05
+        summary.area_integral = (
+            None if summary.area_integral is None else summary.area_integral * 0.05
+        )
         return summary, curves
 
     monkeypatch.setattr(esr_service, "integrate_local_resonance_with_curves", _distorted_local)
@@ -506,9 +561,14 @@ def test_esr_service_flags_fit_local_disagreement_without_replacing_primary_outp
     assert result.fit_local_disagreement_reason is not None
     assert result.single_fit is not None
     assert result.single_fit.derived["fit_local_disagreement_flag"] is True
-    assert result.single_fit.derived["fit_local_windowed_intensity_proxy"] == result.fit_local_total_integral.area_integral
+    assert (
+        result.single_fit.derived["fit_local_windowed_intensity_proxy"]
+        == result.fit_local_total_integral.area_integral
+    )
     assert result.single_fit.feature_summary is not None
-    assert result.single_fit.feature_summary.integrated_intensity_proxy == pytest.approx(result.total_integral.area_integral)
+    assert result.single_fit.feature_summary.integrated_intensity_proxy == pytest.approx(
+        result.total_integral.area_integral
+    )
 
 
 def _write_recipe(path, project_root, **overrides):
@@ -520,8 +580,15 @@ def _write_recipe(path, project_root, **overrides):
             continue
         key, value = stripped.split(":", maxsplit=1)
         payload[key.strip()] = value.strip()
-    payload.update({key: str(value).lower() if isinstance(value, bool) else value for key, value in overrides.items()})
-    path.write_text("\n".join(f"{key}: {value}" for key, value in payload.items()) + "\n", encoding="utf-8")
+    payload.update(
+        {
+            key: str(value).lower() if isinstance(value, bool) else value
+            for key, value in overrides.items()
+        }
+    )
+    path.write_text(
+        "\n".join(f"{key}: {value}" for key, value in payload.items()) + "\n", encoding="utf-8"
+    )
     return path
 
 

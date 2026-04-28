@@ -1,0 +1,60 @@
+schema_version: 1
+measurements:
+  ? fmr:MTJ-NoPattern:MTJ(2Ta5Co2NiFe0,5AlOx2NiFe)UnPatterned21APR2026-BroadbandSweep-R4-2Scotch-1000xingain-10xoutgain-500Hz
+    - 20260421-103152
+  : measurement_id: fmr:MTJ-NoPattern:MTJ(2Ta5Co2NiFe0,5AlOx2NiFe)UnPatterned21APR2026-BroadbandSweep-R4-2Scotch-1000xingain-10xoutgain-500Hz
+      - 20260421-103152
+    sample_id: MTJ-NoPattern
+    type: fmr
+    raw_path: F:\LabAnalysisSuite\labsuite\data\raw\FMR\MTJ(2Ta5Co2NiFe0,5AlOx2NiFe)UnPatterned21APR2026-BroadbandSweep-R4-2Scotch-1000xingain-10xoutgain-500Hz
+      - 20260421-103152.log
+    geometry: ip
+    branch_labels: []
+    instrument: null
+    notes: null
+  fmr:MTJ-NoPattern:MTJUnPatterned-03APR2026-R1 - 20260403-151747:
+    measurement_id: fmr:MTJ-NoPattern:MTJUnPatterned-03APR2026-R1 - 20260403-151747
+    sample_id: MTJ-NoPattern
+    type: fmr
+    raw_path: F:\LabAnalysisSuite\labsuite\data\raw\CryoFMR\MTJUnPatterned-03APR2026-R1
+      - 20260403-151747.log
+    geometry: ip
+    branch_labels: []
+    instrument: null
+    notes: null
+  vsm:MTJ-NoPattern:MTJ-NOPATTERN-100K-R1_00001:
+    measurement_id: vsm:MTJ-NoPattern:MTJ-NOPATTERN-100K-R1_00001
+    sample_id: MTJ-NoPattern
+    type: vsm
+    raw_path: F:\LabAnalysisSuite\labsuite\data\raw\VSM\MTJ-NoPattern\MTJ-NOPATTERN-100K-R1_00001.dat
+    geometry: unknown
+    branch_labels: []
+    instrument: null
+    notes: null
+  vsm:MTJ-NoPattern:MTJ-NOPATTERN-200K-R1_00001:
+    measurement_id: vsm:MTJ-NoPattern:MTJ-NOPATTERN-200K-R1_00001
+    sample_id: MTJ-NoPattern
+    type: vsm
+    raw_path: F:\LabAnalysisSuite\labsuite\data\raw\VSM\MTJ-NoPattern\MTJ-NOPATTERN-200K-R1_00001.dat
+    geometry: unknown
+    branch_labels: []
+    instrument: null
+    notes: null
+  vsm:MTJ-NoPattern:MTJ-NOPATTERN-300K-R1_00001:
+    measurement_id: vsm:MTJ-NoPattern:MTJ-NOPATTERN-300K-R1_00001
+    sample_id: MTJ-NoPattern
+    type: vsm
+    raw_path: F:\LabAnalysisSuite\labsuite\data\raw\VSM\MTJ-NoPattern\MTJ-NOPATTERN-300K-R1_00001.dat
+    geometry: unknown
+    branch_labels: []
+    instrument: null
+    notes: null
+  vsm:MTJ-NoPattern:MTJ-NOPATTERN-55K-R1_00001:
+    measurement_id: vsm:MTJ-NoPattern:MTJ-NOPATTERN-55K-R1_00001
+    sample_id: MTJ-NoPattern
+    type: vsm
+    raw_path: F:\LabAnalysisSuite\labsuite\data\raw\VSM\MTJ-NoPattern\MTJ-NOPATTERN-55K-R1_00001.dat
+    geometry: unknown
+    branch_labels: []
+    instrument: null
+    notes: null

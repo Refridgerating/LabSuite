@@ -5,10 +5,10 @@ from __future__ import annotations
 import csv
 import math
 import re
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import Iterable, Sequence
 
 import numpy as np
 
@@ -68,7 +68,9 @@ class EsrBatchQcRecord:
 
     @property
     def worst_edge_margin(self) -> float:
-        finite_margins = [value for value in (self.edge_margin_peak1, self.edge_margin_peak2) if value is not None]
+        finite_margins = [
+            value for value in (self.edge_margin_peak1, self.edge_margin_peak2) if value is not None
+        ]
         if not finite_margins:
             return float("-inf")
         return min(finite_margins)
@@ -207,7 +209,9 @@ def compute_esr_qc_metrics(
     return record
 
 
-def group_duplicate_runs(records: Iterable[EsrBatchQcRecord]) -> dict[tuple[str, str | None, float | None, float | None], list[EsrBatchQcRecord]]:
+def group_duplicate_runs(
+    records: Iterable[EsrBatchQcRecord],
+) -> dict[tuple[str, str | None, float | None, float | None], list[EsrBatchQcRecord]]:
     """Group ESR QC records into duplicate buckets."""
 
     grouped: dict[tuple[str, str | None, float | None, float | None], list[EsrBatchQcRecord]] = {}
@@ -293,7 +297,9 @@ def export_esr_batch_qc_csv(records: Sequence[EsrBatchQcRecord], destination: Pa
     return destination
 
 
-def build_multi_bucket_slug(identities: Sequence[EsrBatchIdentity]) -> dict[tuple[str, float | None], str]:
+def build_multi_bucket_slug(
+    identities: Sequence[EsrBatchIdentity],
+) -> dict[tuple[str, float | None], str]:
     """Build stable figure slugs for sample/frequency buckets."""
 
     sample_frequency_keys = sorted(
@@ -347,7 +353,9 @@ def _normalized_rmse(analysis: AnalysisResult) -> float | None:
     if signal.size == 0:
         return None
     signal_scale = float(np.max(np.abs(signal)))
-    residual_rmse = float(np.sqrt(np.mean(np.asarray(analysis.selected_residual, dtype=float) ** 2)))
+    residual_rmse = float(
+        np.sqrt(np.mean(np.asarray(analysis.selected_residual, dtype=float) ** 2))
+    )
     if signal_scale <= 1e-12:
         return 0.0 if residual_rmse <= 1e-12 else float("inf")
     return residual_rmse / signal_scale
@@ -404,7 +412,9 @@ def _uncertainty_score(component_fits: Sequence[FitResult]) -> float | None:
             return None
         if center_diagnostic.relative_stderr is None or gamma_diagnostic.relative_stderr is None:
             return None
-        scores.append(float(center_diagnostic.relative_stderr) + float(gamma_diagnostic.relative_stderr))
+        scores.append(
+            float(center_diagnostic.relative_stderr) + float(gamma_diagnostic.relative_stderr)
+        )
     if not scores:
         return None
     return float(np.mean(scores))
@@ -436,21 +446,44 @@ def _qc_reject_reason(
         if center is None or gamma is None:
             return f"{prefix}missing_parameters"
         if not np.isfinite(center) or not np.isfinite(gamma) or float(gamma) <= 0.0:
-            return "second_peak_poorly_constrained" if index == 2 and analysis.selected_mode == "split" else f"{prefix}nonphysical_parameters"
+            return (
+                "second_peak_poorly_constrained"
+                if index == 2 and analysis.selected_mode == "split"
+                else f"{prefix}nonphysical_parameters"
+            )
         if not field_min <= float(center) <= field_max:
-            return "second_peak_center_outside_sweep" if index == 2 and analysis.selected_mode == "split" else f"{prefix}center_outside_sweep"
+            return (
+                "second_peak_center_outside_sweep"
+                if index == 2 and analysis.selected_mode == "split"
+                else f"{prefix}center_outside_sweep"
+            )
 
         edge_margin = record.edge_margin_peak1 if index == 1 else record.edge_margin_peak2
-        guard = max(recipe.batch_qc_edge_guard_min_mT, recipe.batch_qc_edge_guard_gamma_multiplier * float(gamma))
+        guard = max(
+            recipe.batch_qc_edge_guard_min_mT,
+            recipe.batch_qc_edge_guard_gamma_multiplier * float(gamma),
+        )
         if edge_margin is None or not np.isfinite(edge_margin) or edge_margin < guard:
-            return "second_peak_edge_truncated" if index == 2 and analysis.selected_mode == "split" else f"{prefix}edge_truncated"
+            return (
+                "second_peak_edge_truncated"
+                if index == 2 and analysis.selected_mode == "split"
+                else f"{prefix}edge_truncated"
+            )
 
         if not fit.convergence.errorbars:
-            return "second_peak_poorly_constrained" if index == 2 and analysis.selected_mode == "split" else f"{prefix}uncertainty_unusable"
+            return (
+                "second_peak_poorly_constrained"
+                if index == 2 and analysis.selected_mode == "split"
+                else f"{prefix}uncertainty_unusable"
+            )
         center_diagnostic = fit.parameter_diagnostics.get("center_mT")
         gamma_diagnostic = fit.parameter_diagnostics.get("gamma_mT")
         if not _usable_uncertainty(center_diagnostic) or not _usable_uncertainty(gamma_diagnostic):
-            return "second_peak_poorly_constrained" if index == 2 and analysis.selected_mode == "split" else f"{prefix}uncertainty_unusable"
+            return (
+                "second_peak_poorly_constrained"
+                if index == 2 and analysis.selected_mode == "split"
+                else f"{prefix}uncertainty_unusable"
+            )
 
     if record.nrmse is None or not np.isfinite(record.nrmse):
         return "nrmse_unusable"
@@ -477,7 +510,9 @@ def _candidate_rank_key(record: EsrBatchQcRecord) -> tuple[float, float, float, 
         else float("-inf")
     )
     nrmse = float("inf") if record.nrmse is None else float(record.nrmse)
-    uncertainty = float("inf") if record.uncertainty_score is None else float(record.uncertainty_score)
+    uncertainty = (
+        float("inf") if record.uncertainty_score is None else float(record.uncertainty_score)
+    )
     snr = float("-inf") if record.snr is None else float(record.snr)
     return (
         -record.worst_edge_margin,

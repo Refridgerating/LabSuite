@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import csv
 import json
-from pathlib import Path
 
 import pytest
 
@@ -18,7 +17,9 @@ def test_discover_esr_source_files_accepts_direct_file(write_bruker_esr_sample, 
     assert discovered == [source_file.resolve()]
 
 
-def test_discover_esr_source_files_filters_directory_by_pattern(write_bruker_esr_sample, tmp_path) -> None:
+def test_discover_esr_source_files_filters_directory_by_pattern(
+    write_bruker_esr_sample, tmp_path
+) -> None:
     source_dir = tmp_path / "raw"
     source_dir.mkdir()
     keep = write_bruker_esr_sample(source_dir / "alpha_deg_trace.dsc")
@@ -30,7 +31,9 @@ def test_discover_esr_source_files_filters_directory_by_pattern(write_bruker_esr
     assert discovered == [keep.resolve()]
 
 
-def test_discover_esr_source_files_respects_recursive_flag(write_bruker_esr_sample, tmp_path) -> None:
+def test_discover_esr_source_files_respects_recursive_flag(
+    write_bruker_esr_sample, tmp_path
+) -> None:
     source_dir = tmp_path / "raw"
     nested_dir = source_dir / "nested"
     nested_dir.mkdir(parents=True)
@@ -43,7 +46,9 @@ def test_discover_esr_source_files_respects_recursive_flag(write_bruker_esr_samp
     assert recursive == [nested_file.resolve()]
 
 
-def test_discover_esr_source_files_deduplicates_and_sorts(write_bruker_esr_sample, tmp_path) -> None:
+def test_discover_esr_source_files_deduplicates_and_sorts(
+    write_bruker_esr_sample, tmp_path
+) -> None:
     source_dir = tmp_path / "raw"
     source_dir.mkdir()
     second = write_bruker_esr_sample(source_dir / "b_trace.dsc")
@@ -76,7 +81,9 @@ def test_run_esr_batch_workflow_writes_per_file_outputs_and_aggregate_artifacts(
     source_dir = tmp_path / "raw"
     source_dir.mkdir()
     first = write_bruker_esr_sample(source_dir / "sample-0deg-R1.dsc")
-    second = write_bruker_esr_sample(source_dir / "sample-45deg-R1.dsc", center_mT=338.5, gamma_mT=0.9)
+    second = write_bruker_esr_sample(
+        source_dir / "sample-45deg-R1.dsc", center_mT=338.5, gamma_mT=0.9
+    )
     output_dir = tmp_path / "processed" / "batch_run"
     recipe_path = project_root / "recipes" / "esr" / "default.yaml"
 
@@ -124,13 +131,14 @@ def test_run_esr_batch_workflow_writes_per_file_outputs_and_aggregate_artifacts(
     assert payload["failed_count"] == 0
     assert payload["batch_figure_png"] is None
     assert payload["batch_figures"] == {
-        key: str(path)
-        for key, path in sorted(result.batch_figure_paths.items())
+        key: str(path) for key, path in sorted(result.batch_figure_paths.items())
     }
     assert len(payload["items"]) == 2
 
 
-def test_run_esr_batch_workflow_groups_output_by_replicate(tmp_path, project_root, write_bruker_esr_sample) -> None:
+def test_run_esr_batch_workflow_groups_output_by_replicate(
+    tmp_path, project_root, write_bruker_esr_sample
+) -> None:
     source_dir = tmp_path / "raw"
     source_dir.mkdir()
     first = write_bruker_esr_sample(source_dir / "sample-90deg-R1.dsc")
@@ -157,7 +165,9 @@ def test_run_esr_batch_workflow_groups_output_by_replicate(tmp_path, project_roo
     }
 
 
-def test_run_esr_batch_workflow_continues_when_one_file_fails(tmp_path, project_root, write_bruker_esr_sample) -> None:
+def test_run_esr_batch_workflow_continues_when_one_file_fails(
+    tmp_path, project_root, write_bruker_esr_sample
+) -> None:
     source_dir = tmp_path / "raw"
     source_dir.mkdir()
     valid = write_bruker_esr_sample(source_dir / "valid-15deg-R1.dsc")
@@ -210,12 +220,13 @@ def test_run_esr_batch_workflow_continues_when_one_file_fails(tmp_path, project_
     payload = json.loads(result.manifest_json_path.read_text(encoding="utf-8"))
     assert payload["batch_figure_png"] is None
     assert payload["batch_figures"] == {
-        key: str(path)
-        for key, path in sorted(result.batch_figure_paths.items())
+        key: str(path) for key, path in sorted(result.batch_figure_paths.items())
     }
 
 
-def test_run_esr_batch_workflow_groups_missing_replicate_under_ungrouped(tmp_path, project_root, write_bruker_esr_sample) -> None:
+def test_run_esr_batch_workflow_groups_missing_replicate_under_ungrouped(
+    tmp_path, project_root, write_bruker_esr_sample
+) -> None:
     source_dir = tmp_path / "raw"
     source_dir.mkdir()
     write_bruker_esr_sample(source_dir / "sample-0deg.dsc")
@@ -235,7 +246,9 @@ def test_run_esr_batch_workflow_groups_missing_replicate_under_ungrouped(tmp_pat
     }
 
 
-def test_run_esr_batch_workflow_records_null_batch_figure_when_no_files_succeed(tmp_path, project_root) -> None:
+def test_run_esr_batch_workflow_records_null_batch_figure_when_no_files_succeed(
+    tmp_path, project_root
+) -> None:
     source_dir = tmp_path / "raw"
     source_dir.mkdir()
     for stem in ("broken_a", "broken_b"):
@@ -313,7 +326,9 @@ def test_run_esr_batch_workflow_selects_best_duplicate_same_angle(
         "batch_processed_offset_R1": output_dir / "batch_processed_offset_R1.png",
     }
 
-    qc_rows = list(csv.DictReader((output_dir / "batch_qc.csv").open("r", encoding="utf-8", newline="")))
+    qc_rows = list(
+        csv.DictReader((output_dir / "batch_qc.csv").open("r", encoding="utf-8", newline=""))
+    )
     clipped_row = next(row for row in qc_rows if row["file"] == str(clipped.resolve()))
     best_row = next(row for row in qc_rows if row["file"] == str(best.resolve()))
     other_row = next(row for row in qc_rows if row["file"] == str(other_angle.resolve()))
@@ -327,9 +342,13 @@ def test_run_esr_batch_workflow_selects_best_duplicate_same_angle(
     assert other_row["selected_as_best"] == "True"
     assert other_row["accepted_for_plot"] == "True"
 
-    summary_rows = list(csv.DictReader(result.summary_csv_path.open("r", encoding="utf-8", newline="")))
+    summary_rows = list(
+        csv.DictReader(result.summary_csv_path.open("r", encoding="utf-8", newline=""))
+    )
     best_summary = next(row for row in summary_rows if row["source_file"] == str(best.resolve()))
-    clipped_summary = next(row for row in summary_rows if row["source_file"] == str(clipped.resolve()))
+    clipped_summary = next(
+        row for row in summary_rows if row["source_file"] == str(clipped.resolve())
+    )
     assert best_summary["selected_as_best"] == "True"
     assert best_summary["accepted_for_plot"] == "True"
     assert clipped_summary["accepted_for_plot"] == "False"

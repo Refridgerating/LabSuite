@@ -56,7 +56,9 @@ def test_fmr_single_exports_all_artifacts(tmp_path, project_root, write_phasefmr
     assert len(payload["artifacts"]["trace_diagnostic_paths"]) == 4
     assert "mode_1" in payload["analysis_payload"]["series_collection_result"]["series_by_label"]
     assert "mode_2" in payload["analysis_payload"]["series_collection_result"]["series_by_label"]
-    assert all(fit["r_squared"] is not None for fit in payload["analysis_payload"]["trace_fit_results"])
+    assert all(
+        fit["r_squared"] is not None for fit in payload["analysis_payload"]["trace_fit_results"]
+    )
 
     summary_rows = list(csv.DictReader(summary_path.open("r", encoding="utf-8", newline="")))
     assert summary_rows
@@ -81,8 +83,18 @@ def test_fmr_single_exports_all_artifacts(tmp_path, project_root, write_phasefmr
 def test_fmr_batch_export_and_report_workflows(tmp_path, project_root, write_phasefmr_log) -> None:
     source_dir = tmp_path / "raw_fmr"
     source_dir.mkdir()
-    first_file = write_phasefmr_log(source_dir / "Temp2-Co-A-2,5to17GHz-R1.log", frequencies_GHz=[8.0, 9.0, 10.0, 11.0], secondary_resonance_delta_mT=52.0, secondary_linewidth_mT=9.0)
-    write_phasefmr_log(source_dir / "Temp2-Co-A-2,5to17GHz-R2.log", frequencies_GHz=[8.0, 9.0, 10.0, 11.0], secondary_resonance_delta_mT=52.0, secondary_linewidth_mT=9.0)
+    first_file = write_phasefmr_log(
+        source_dir / "Temp2-Co-A-2,5to17GHz-R1.log",
+        frequencies_GHz=[8.0, 9.0, 10.0, 11.0],
+        secondary_resonance_delta_mT=52.0,
+        secondary_linewidth_mT=9.0,
+    )
+    write_phasefmr_log(
+        source_dir / "Temp2-Co-A-2,5to17GHz-R2.log",
+        frequencies_GHz=[8.0, 9.0, 10.0, 11.0],
+        secondary_resonance_delta_mT=52.0,
+        secondary_linewidth_mT=9.0,
+    )
     recipe_path = project_root / "recipes" / "fmr" / "default.yaml"
     batch_dir = tmp_path / "fmr_batch"
 
@@ -156,10 +168,14 @@ def test_fmr_batch_export_and_report_workflows(tmp_path, project_root, write_pha
     assert "accepted components" in batch_report_text
 
 
-def test_fmr_batch_can_export_resonance_metrics_csv(tmp_path, project_root, write_phasefmr_log) -> None:
+def test_fmr_batch_can_export_resonance_metrics_csv(
+    tmp_path, project_root, write_phasefmr_log
+) -> None:
     source_dir = tmp_path / "raw_fmr"
     source_dir.mkdir()
-    write_phasefmr_log(source_dir / "Temp2-Co-A-2,5to17GHz-R1.log", frequencies_GHz=[8.0, 9.0, 10.0])
+    write_phasefmr_log(
+        source_dir / "Temp2-Co-A-2,5to17GHz-R1.log", frequencies_GHz=[8.0, 9.0, 10.0]
+    )
     recipe_path = project_root / "recipes" / "fmr" / "default.yaml"
     batch_dir = tmp_path / "fmr_batch"
 
@@ -210,8 +226,6 @@ def test_fmr_cli_field_polarity_flags_export_pair_diagnostics(
             str(recipe_path),
             "--output-dir",
             str(output_dir),
-            "--registry",
-            str(tmp_path / "missing_registry.yaml"),
             "--field-polarity-correction",
             "gonzalez-fuentes",
             "--polarity-column",

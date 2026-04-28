@@ -123,22 +123,28 @@ def analyze_esr_file(
         )
         peak_curves = _build_fit_integrated_curves(processed, peak_fit.fit)
         if peak_local_integral.area_integral is None or peak_local_curves is None:
-            peak_fit_local_integral = _unavailable_fit_local_integral(peak_local_integral, label=peak_fit.label)
+            peak_fit_local_integral = _unavailable_fit_local_integral(
+                peak_local_integral, label=peak_fit.label
+            )
             peak_fit_local_curves = None
             disagreement_ratio = None
             disagreement_flag = True
             disagreement_reason = f"split_local_diagnostic_unavailable:{local_diagnostic_reason}"
         else:
-            peak_fit_local_integral, peak_fit_local_curves = _build_window_matched_fit_curves_and_integral(
-                trace=processed,
-                fit=peak_fit.fit,
-                local_summary=peak_local_integral,
-                label=peak_fit.label,
+            peak_fit_local_integral, peak_fit_local_curves = (
+                _build_window_matched_fit_curves_and_integral(
+                    trace=processed,
+                    fit=peak_fit.fit,
+                    local_summary=peak_local_integral,
+                    label=peak_fit.label,
+                )
             )
-            disagreement_ratio, disagreement_flag, disagreement_reason = _compute_fit_local_disagreement(
-                fit_local_area_integral=peak_fit_local_integral.area_integral,
-                local_area_integral=peak_local_integral.area_integral,
-                threshold=recipe.fit_local_disagreement_ratio_threshold,
+            disagreement_ratio, disagreement_flag, disagreement_reason = (
+                _compute_fit_local_disagreement(
+                    fit_local_area_integral=peak_fit_local_integral.area_integral,
+                    local_area_integral=peak_local_integral.area_integral,
+                    threshold=recipe.fit_local_disagreement_ratio_threshold,
+                )
             )
         _attach_primary_intensity(
             peak_fit.fit,
@@ -161,14 +167,17 @@ def analyze_esr_file(
         if peak_local_curves is not None:
             candidate_peak_local_curves.append(peak_local_curves)
 
-    split_fit = build_split_fit(processed, candidate_peak_fits) if len(candidate_peak_fits) >= 2 else None
+    split_fit = (
+        build_split_fit(processed, candidate_peak_fits) if len(candidate_peak_fits) >= 2 else None
+    )
     if split_fit is not None:
         split_fit.derived["fit_valid"] = bool(split_fit.success)
         split_fit.derived["fit_scope"] = "split_selected"
         split_fit.derived["fit_rejection_reason"] = None
         split_fit.derived["selected_for_primary"] = False
         split_fit.derived["integration_window_clipped_by_detected_window"] = any(
-            integral.integration_window_clipped_by_detected_window for integral in candidate_peak_integrals
+            integral.integration_window_clipped_by_detected_window
+            for integral in candidate_peak_integrals
         )
 
     selected_mode, fit_decision = select_fit_mode(
@@ -246,12 +255,14 @@ def analyze_esr_file(
             fit_local_disagreement_flag = True
             fit_local_disagreement_reason = split_local_reason
         else:
-            fit_local_disagreement_ratio, fit_local_disagreement_flag, fit_local_disagreement_reason = (
-                _compute_fit_local_disagreement(
-                    fit_local_area_integral=fit_local_total_integral.area_integral,
-                    local_area_integral=local_total_integral.area_integral,
-                    threshold=recipe.fit_local_disagreement_ratio_threshold,
-                )
+            (
+                fit_local_disagreement_ratio,
+                fit_local_disagreement_flag,
+                fit_local_disagreement_reason,
+            ) = _compute_fit_local_disagreement(
+                fit_local_area_integral=fit_local_total_integral.area_integral,
+                local_area_integral=local_total_integral.area_integral,
+                threshold=recipe.fit_local_disagreement_ratio_threshold,
             )
         if split_fit is not None:
             split_fit.derived["selected_for_primary"] = True
@@ -346,7 +357,9 @@ def _create_fit_attempt(
     trace: ProcessedTrace,
     recipe: EsrPreprocessingRecipe,
 ) -> FitAttemptRecord:
-    rejection_reason = _validate_fit_result(fit, trace=trace, recipe=recipe, source_window=source_window)
+    rejection_reason = _validate_fit_result(
+        fit, trace=trace, recipe=recipe, source_window=source_window
+    )
     accepted = rejection_reason is None
     fit.success = fit.success and accepted
     fit.derived["fit_scope"] = scope
@@ -428,7 +441,14 @@ def _selected_single_integral(
     if not attempt.accepted:
         local_summary = _unavailable_selected_local_integral(attempt)
         fit_local_summary = _unavailable_fit_local_integral(local_summary)
-        return _unavailable_primary_integral(local_summary), None, fit_local_summary, None, local_summary, None
+        return (
+            _unavailable_primary_integral(local_summary),
+            None,
+            fit_local_summary,
+            None,
+            local_summary,
+            None,
+        )
 
     local_integral, local_curves = integrate_local_resonance_with_curves(
         trace,
@@ -440,7 +460,9 @@ def _selected_single_integral(
     )
     renamed_local_summary = _rename_integral_summary(local_integral, "local_total")
     renamed_local_curves = (
-        None if local_curves is None else _rename_local_integrated_curves(local_curves, renamed_local_summary)
+        None
+        if local_curves is None
+        else _rename_local_integrated_curves(local_curves, renamed_local_summary)
     )
     primary_integral = _build_fit_integral_summary(
         label="total",
@@ -470,7 +492,14 @@ def _selected_single_integral(
         disagreement_flag=disagreement_flag,
         disagreement_reason=disagreement_reason,
     )
-    return primary_integral, primary_curves, fit_local_integral, fit_local_curves, renamed_local_summary, renamed_local_curves
+    return (
+        primary_integral,
+        primary_curves,
+        fit_local_integral,
+        fit_local_curves,
+        renamed_local_summary,
+        renamed_local_curves,
+    )
 
 
 def _unavailable_selected_local_integral(attempt: FitAttemptRecord) -> IntegralSummary:
@@ -625,7 +654,9 @@ def _rename_local_integrated_curves(
     )
 
 
-def _build_fit_integrated_curves(trace: ProcessedTrace, fit: FitResult) -> FitIntegratedCurves | None:
+def _build_fit_integrated_curves(
+    trace: ProcessedTrace, fit: FitResult
+) -> FitIntegratedCurves | None:
     required = {"amplitude", "center_mT", "gamma_mT"}
     if not required.issubset(fit.parameters):
         return None
@@ -705,7 +736,9 @@ def _build_window_matched_fit_curves_and_integral(
             None,
         )
     field = trace.field_mT
-    integration_mask = (field >= local_summary.start_field_mT) & (field <= local_summary.end_field_mT)
+    integration_mask = (field >= local_summary.start_field_mT) & (
+        field <= local_summary.end_field_mT
+    )
     if int(np.count_nonzero(integration_mask)) < 2:
         return (
             IntegralSummary(
@@ -766,7 +799,11 @@ def _compute_fit_local_disagreement(
     denominator = max(abs(fit_local_area_integral), abs(local_area_integral), 1e-12)
     ratio = abs(fit_local_area_integral - local_area_integral) / denominator
     if ratio > threshold:
-        return ratio, True, f"fit_local_window_vs_data_ratio_exceeds_threshold:{ratio:.3g}>{threshold:.3g}"
+        return (
+            ratio,
+            True,
+            f"fit_local_window_vs_data_ratio_exceeds_threshold:{ratio:.3g}>{threshold:.3g}",
+        )
     return ratio, False, None
 
 
@@ -824,7 +861,9 @@ def _combine_integral_summaries(
     label: str,
     summaries: list[IntegralSummary],
     *,
-    integration_kind: Literal["primary_fit_model", "fit_local_windowed_model", "primary_local_window"],
+    integration_kind: Literal[
+        "primary_fit_model", "fit_local_windowed_model", "primary_local_window"
+    ],
 ) -> IntegralSummary:
     if not summaries:
         return IntegralSummary(
@@ -844,11 +883,15 @@ def _combine_integral_summaries(
         label=label,
         start_field_mT=min(summary.start_field_mT for summary in summaries),
         end_field_mT=max(summary.end_field_mT for summary in summaries),
-        absorption_integral=None if any(value is None for value in absorption_values) else sum(absorption_values),
+        absorption_integral=None
+        if any(value is None for value in absorption_values)
+        else sum(absorption_values),
         area_integral=None if any(value is None for value in area_values) else sum(area_values),
         integration_kind=integration_kind,
         window_source="fit_linewidth",
-        baseline_polyorder=None if any(summary.baseline_polyorder is None for summary in summaries) else summaries[0].baseline_polyorder,
+        baseline_polyorder=None
+        if any(summary.baseline_polyorder is None for summary in summaries)
+        else summaries[0].baseline_polyorder,
         integration_window_clipped_by_detected_window=any(
             summary.integration_window_clipped_by_detected_window for summary in summaries
         ),
@@ -900,7 +943,9 @@ def _combine_windowed_integrated_curves(
         end_field_mT=max(curve.end_field_mT for curve in curves),
         integration_kind=curves[0].integration_kind,
         window_source="fit_linewidth",
-        baseline_polyorder=None if any(curve.baseline_polyorder is None for curve in curves) else curves[0].baseline_polyorder,
+        baseline_polyorder=None
+        if any(curve.baseline_polyorder is None for curve in curves)
+        else curves[0].baseline_polyorder,
         integration_window_clipped_by_detected_window=any(
             curve.integration_window_clipped_by_detected_window for curve in curves
         ),

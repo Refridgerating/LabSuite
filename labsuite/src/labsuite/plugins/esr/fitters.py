@@ -68,7 +68,9 @@ def fit_derivative_lorentzian(
     offset_guess = float(np.mean(np.concatenate((signal[:5], signal[-5:]))))
     amplitude_scale = 9.0 / (8.0 * math.sqrt(3.0))
     amplitude_sign = 1.0 if field[peak_index] < field[trough_index] else -1.0
-    amplitude_guess = amplitude_sign * float(max(abs(signal[peak_index]), abs(signal[trough_index])) / amplitude_scale)
+    amplitude_guess = amplitude_sign * float(
+        max(abs(signal[peak_index]), abs(signal[trough_index])) / amplitude_scale
+    )
 
     model = Model(derivative_lorentzian, independent_vars=["field_mT"])
     params = model.make_params(
@@ -127,14 +129,22 @@ def detect_peak_windows(
     distance_points = max(1, int(round(recipe.peak_min_distance_mT / field_step)))
     prominence = float(max(np.max(np.abs(signal)) * recipe.peak_min_prominence_ratio, 1e-9))
 
-    positive_indices, positive_props = find_peaks(signal, prominence=prominence, distance=distance_points)
-    negative_indices, negative_props = find_peaks(-signal, prominence=prominence, distance=distance_points)
+    positive_indices, positive_props = find_peaks(
+        signal, prominence=prominence, distance=distance_points
+    )
+    negative_indices, negative_props = find_peaks(
+        -signal, prominence=prominence, distance=distance_points
+    )
     if positive_indices.size == 0 or negative_indices.size == 0:
         return []
 
     candidates: dict[tuple[int, int], PeakWindow] = {}
-    for peak_index, peak_prominence in zip(positive_indices, positive_props["prominences"], strict=True):
-        nearest_trough_position = int(np.argmin(np.abs(field[negative_indices] - field[peak_index])))
+    for peak_index, peak_prominence in zip(
+        positive_indices, positive_props["prominences"], strict=True
+    ):
+        nearest_trough_position = int(
+            np.argmin(np.abs(field[negative_indices] - field[peak_index]))
+        )
         trough_index = int(negative_indices[nearest_trough_position])
         trough_prominence = float(negative_props["prominences"][nearest_trough_position])
         width_mT = abs(float(field[trough_index] - field[peak_index]))
@@ -168,7 +178,10 @@ def detect_peak_windows(
     selected: list[PeakWindow] = []
     for candidate in ranked_candidates:
         overlaps = any(
-            not (candidate.end_index < existing.start_index or candidate.start_index > existing.end_index)
+            not (
+                candidate.end_index < existing.start_index
+                or candidate.start_index > existing.end_index
+            )
             for existing in selected
         )
         if overlaps:
@@ -231,7 +244,9 @@ def build_split_fit(trace: ProcessedTrace, peak_fits: list[PeakFitResult]) -> Fi
     if not peak_fits:
         raise WorkflowError("Cannot build a split fit without fitted peak components.")
 
-    global_offset = float(np.mean([peak_fit.fit.parameters.get("offset", 0.0) for peak_fit in peak_fits]))
+    global_offset = float(
+        np.mean([peak_fit.fit.parameters.get("offset", 0.0) for peak_fit in peak_fits])
+    )
     fitted_signal = np.full_like(trace.signal, global_offset)
     for peak_fit in peak_fits:
         fitted_signal += peak_fit.component_signal
@@ -248,9 +263,19 @@ def build_split_fit(trace: ProcessedTrace, peak_fits: list[PeakFitResult]) -> Fi
     feature_summary = FeatureSummary(
         positive_extremum_field_mT=float(trace.field_mT[positive_index]),
         negative_extremum_field_mT=float(trace.field_mT[negative_index]),
-        zero_crossing_field_mT=float(np.mean([peak_fit.fit.feature_summary.zero_crossing_field_mT for peak_fit in peak_fits if peak_fit.fit.feature_summary is not None])),
+        zero_crossing_field_mT=float(
+            np.mean(
+                [
+                    peak_fit.fit.feature_summary.zero_crossing_field_mT
+                    for peak_fit in peak_fits
+                    if peak_fit.fit.feature_summary is not None
+                ]
+            )
+        ),
         peak_to_peak_separation_mT=width,
-        integrated_intensity_proxy=None if any(value is None for value in intensity_values) else float(sum(intensity_values)),
+        integrated_intensity_proxy=None
+        if any(value is None for value in intensity_values)
+        else float(sum(intensity_values)),
     )
     return FitResult(
         model_name="split_derivative_lorentzian",
@@ -328,7 +353,9 @@ def select_fit_mode(
 
     if requested_mode == "split":
         if split_fit is None or len(peak_windows) < 2 or not split_fit.success:
-            raise WorkflowError("Split fit mode requested, but two valid peak windows were not available.")
+            raise WorkflowError(
+                "Split fit mode requested, but two valid peak windows were not available."
+            )
         return "split", FitDecision(
             requested_mode=requested_mode,
             selected_mode="split",

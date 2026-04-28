@@ -17,21 +17,22 @@ from labsuite.core.resonance_metrics import ResonanceMetricsConfig
 from labsuite.core.sample_registry import (
     AnalysisSampleContext,
     RegistryWorkflowOptions,
+    record_processed_result,
     resolve_analysis_context,
     to_serializable,
 )
 from labsuite.core.types import AnalysisResult
+from labsuite.plugins.esr.service import analyze_esr_file
 from labsuite.plugins.fmr.service import (
     analyze_fmr_file,
     export_fmr_analysis_csv,
     export_fmr_analysis_figure,
     export_fmr_analysis_json,
-    export_fmr_series_csv,
     export_fmr_polarity_diagnostics_figure,
+    export_fmr_series_csv,
     export_fmr_summary_csv,
     export_fmr_trace_diagnostic_figures,
 )
-from labsuite.plugins.esr.service import analyze_esr_file
 from labsuite.plugins.vsm.service import (
     analyze_vsm_file,
     export_vsm_analysis_csv,
@@ -88,6 +89,14 @@ def run_esr_single_file_workflow(
     export_analysis_json(analysis, artifacts.json_path)
     export_analysis_csv(analysis, artifacts.csv_path, artifacts.summary_csv_path)
     export_analysis_figure(analysis, artifacts.figure_path, show=show_raw)
+    record_processed_result(
+        sample_context=sample_context,
+        measurement_type="esr",
+        processed_path=artifacts.json_path,
+        recipe_path=recipe_path,
+        analysis=analysis,
+        options=registry_options,
+    )
     _write_analysis_provenance(
         output_dir=output_dir,
         modality="esr",
@@ -95,7 +104,10 @@ def run_esr_single_file_workflow(
         recipe_path=recipe_path,
         sample_context=sample_context,
         registry_options=registry_options,
-        extra_config={"fit_mode": fit_mode, "resonance_metrics_config": _maybe_to_dict(resonance_metrics_config)},
+        extra_config={
+            "fit_mode": fit_mode,
+            "resonance_metrics_config": _maybe_to_dict(resonance_metrics_config),
+        },
     )
 
     return analysis, artifacts
@@ -116,7 +128,9 @@ def run_vsm_single_file_workflow(
         measurement_type="vsm",
         options=registry_options,
     )
-    analysis = analyze_vsm_file(source_path=source_path, recipe_path=recipe_path, sample_context=sample_context)
+    analysis = analyze_vsm_file(
+        source_path=source_path, recipe_path=recipe_path, sample_context=sample_context
+    )
 
     stem = source_path.stem
     artifacts = WorkflowArtifacts(
@@ -138,6 +152,14 @@ def run_vsm_single_file_workflow(
     export_vsm_analysis_csv(analysis, artifacts.csv_path)
     export_vsm_summary_csv(analysis, artifacts.summary_csv_path)
     export_vsm_analysis_figure(analysis, artifacts.figure_path)
+    record_processed_result(
+        sample_context=sample_context,
+        measurement_type="vsm",
+        processed_path=artifacts.json_path,
+        recipe_path=recipe_path,
+        analysis=analysis,
+        options=registry_options,
+    )
     _write_analysis_provenance(
         output_dir=output_dir,
         modality="vsm",
@@ -203,9 +225,13 @@ def run_fmr_single_file_workflow(
             "summary_csv_path": str(artifacts.summary_csv_path),
             "figure_path": str(artifacts.figure_path),
             "series_csv_path": str(series_csv_path),
-            "polarity_diagnostics_path": None if polarity_plot_path is None else str(polarity_plot_path),
+            "polarity_diagnostics_path": None
+            if polarity_plot_path is None
+            else str(polarity_plot_path),
             "trace_diagnostics_dir": str(diagnostics_dir),
-            "trace_diagnostic_paths": {trace_id: str(path) for trace_id, path in diagnostic_paths.items()},
+            "trace_diagnostic_paths": {
+                trace_id: str(path) for trace_id, path in diagnostic_paths.items()
+            },
         }
     )
 
@@ -214,6 +240,14 @@ def run_fmr_single_file_workflow(
     export_fmr_series_csv(analysis, series_csv_path)
     export_fmr_analysis_figure(analysis, artifacts.figure_path)
     export_fmr_analysis_json(analysis, artifacts.json_path)
+    record_processed_result(
+        sample_context=sample_context,
+        measurement_type="fmr",
+        processed_path=artifacts.json_path,
+        recipe_path=recipe_path,
+        analysis=analysis,
+        options=registry_options,
+    )
     _write_analysis_provenance(
         output_dir=output_dir,
         modality="fmr",
@@ -243,6 +277,9 @@ def _write_analysis_provenance(
     config = {
         "modality": modality,
         "source_path": source_path.resolve(),
+        "original_source_path": None
+        if registry_options is None
+        else registry_options.original_source_path,
         "recipe_path": recipe_path.resolve(),
         "registry_options": registry_options,
         "resolved_sample": None if sample_context is None else sample_context.to_dict(),
@@ -253,9 +290,31 @@ def _write_analysis_provenance(
         yaml.safe_dump(to_serializable(config), sort_keys=False),
         encoding="utf-8",
     )
-    snapshot = {} if sample_context is None or sample_context.registry_snapshot is None else sample_context.registry_snapshot
+    snapshot = (
+        {}
+        if sample_context is None or sample_context.registry_snapshot is None
+        else sample_context.registry_snapshot
+    )
     (output_dir / "sample_registry_snapshot.yaml").write_text(
         yaml.safe_dump(to_serializable(snapshot), sort_keys=False),
+        encoding="utf-8",
+    )
+    measurement_snapshot = (
+        {}
+        if sample_context is None or sample_context.measurement_ledger_snapshot is None
+        else sample_context.measurement_ledger_snapshot
+    )
+    (output_dir / "measurement_ledger_snapshot.yaml").write_text(
+        yaml.safe_dump(to_serializable(measurement_snapshot), sort_keys=False),
+        encoding="utf-8",
+    )
+    processed_snapshot = (
+        {}
+        if sample_context is None or sample_context.processed_ledger_snapshot is None
+        else sample_context.processed_ledger_snapshot
+    )
+    (output_dir / "processed_ledger_snapshot.yaml").write_text(
+        yaml.safe_dump(to_serializable(processed_snapshot), sort_keys=False),
         encoding="utf-8",
     )
 

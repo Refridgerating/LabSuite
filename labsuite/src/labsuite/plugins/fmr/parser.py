@@ -34,17 +34,22 @@ def parse_fmr_file(
         actual_type = instrument_settings.get("Instrument type")
         raise ParseError(f"Unsupported FMR instrument type in {path.name}: {actual_type!r}")
 
-    sweep_header, sweep_rows = _parse_table_section(sections.get("Sweep settings"), path=path, name="Sweep settings")
+    sweep_header, sweep_rows = _parse_table_section(
+        sections.get("Sweep settings"), path=path, name="Sweep settings"
+    )
     data_header, data_rows = _parse_table_section(sections.get("Data"), path=path, name="Data")
     if "Frequency" not in data_header or "Field" not in data_header:
-        raise ParseError(f"Missing required FMR columns in {path.name}: expected Frequency and Field")
+        raise ParseError(
+            f"Missing required FMR columns in {path.name}: expected Frequency and Field"
+        )
 
     file_metadata, filename_warnings = _parse_filename_metadata(path)
     measurement_mode = instrument_settings.get("FMR.MeasType")
     nominal_temperature_K = _extract_nominal_temperature(data_rows, data_header)
 
     sweep_rows_by_frequency = {
-        _frequency_key(_parse_float(row.get("Frequency(GHz)"), path, "Frequency(GHz)")): row for row in sweep_rows
+        _frequency_key(_parse_float(row.get("Frequency(GHz)"), path, "Frequency(GHz)")): row
+        for row in sweep_rows
     }
     grouped_rows = _group_rows_by_frequency_and_polarity(
         data_rows,
@@ -60,7 +65,9 @@ def parse_fmr_file(
     warnings = list(filename_warnings)
     if polarity_column is not None and polarity_column not in data_header:
         warnings.append(f"field_polarity_column_missing:{polarity_column}")
-    for index, (frequency_GHz, field_polarity, raw_polarity_label, rows) in enumerate(grouped_rows, start=1):
+    for index, (frequency_GHz, field_polarity, raw_polarity_label, rows) in enumerate(
+        grouped_rows, start=1
+    ):
         settings_row = sweep_rows_by_frequency.get(_frequency_key(frequency_GHz))
         if settings_row is None:
             warnings.append(f"missing_sweep_settings_for_frequency:{frequency_GHz:.6g}GHz")
@@ -108,7 +115,11 @@ def parse_fmr_file(
             "frequency_GHz_values": ordered_frequencies,
             "polarity_column": polarity_column,
             "field_polarity_values": sorted(
-                {polarity for _frequency, polarity, _raw, _rows in grouped_rows if polarity is not None}
+                {
+                    polarity
+                    for _frequency, polarity, _raw, _rows in grouped_rows
+                    if polarity is not None
+                }
             ),
         },
         warnings=warnings,
@@ -191,7 +202,9 @@ def _parse_filename_metadata(path: Path) -> tuple[dict[str, Any], list[str]]:
         if angle_deg is None and angle_match is not None:
             angle_deg = float(angle_match.group(1).replace(",", "."))
             continue
-        if sweep_span_label is None and re.fullmatch(r"\d+(?:[.,]\d+)?to\d+(?:[.,]\d+)?GHz", part, flags=re.IGNORECASE):
+        if sweep_span_label is None and re.fullmatch(
+            r"\d+(?:[.,]\d+)?to\d+(?:[.,]\d+)?GHz", part, flags=re.IGNORECASE
+        ):
             sweep_span_label = part
             continue
         sample_parts.append(part)
@@ -216,10 +229,16 @@ def _parse_filename_metadata(path: Path) -> tuple[dict[str, Any], list[str]]:
     )
 
 
-def _extract_nominal_temperature(data_rows: list[dict[str, str]], data_header: list[str]) -> float | None:
+def _extract_nominal_temperature(
+    data_rows: list[dict[str, str]], data_header: list[str]
+) -> float | None:
     if "Temp" not in data_header:
         return None
-    temperatures = [float(value) for value in (_safe_float(row.get("Temp")) for row in data_rows) if value is not None]
+    temperatures = [
+        float(value)
+        for value in (_safe_float(row.get("Temp")) for row in data_rows)
+        if value is not None
+    ]
     if not temperatures:
         return None
     return float(round(float(np.median(np.asarray(temperatures, dtype=float)))))
@@ -275,7 +294,9 @@ def _build_trace_dataset(
     raw_polarity_label: str | None,
     polarity_column: str | None,
 ) -> FmrTraceDataset:
-    field_oe = np.asarray([_parse_float(row.get("Field"), path, "Field") for row in rows], dtype=float)
+    field_oe = np.asarray(
+        [_parse_float(row.get("Field"), path, "Field") for row in rows], dtype=float
+    )
     field_mT = field_oe / 10.0
     i_signal = _optional_column(rows, "I")
     q_signal = _optional_column(rows, "Q")
@@ -297,7 +318,10 @@ def _build_trace_dataset(
         (None, None),
     )
     if selected_name is None or selected_signal is None:
-        raise ParseError(f"Unable to determine a numeric FMR signal channel for {path.name} at {frequency_GHz:.6g} GHz")
+        raise ParseError(
+            f"Unable to determine a numeric FMR signal channel for {path.name} "
+            f"at {frequency_GHz:.6g} GHz"
+        )
 
     temperature_K = None
     if temp_signal is not None and np.any(np.isfinite(temp_signal)):

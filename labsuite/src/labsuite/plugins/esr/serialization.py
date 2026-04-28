@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 import json
-from pathlib import Path
 import re
+from pathlib import Path
 from typing import Any
 
 import matplotlib.pyplot as plt
@@ -51,7 +51,9 @@ def load_esr_analysis_result(path: Path) -> AnalysisResult:
     )
     integrated = IntegratedCurves(
         field_mT=np.asarray(payload["integrated_curves"]["field_mT"], dtype=float),
-        absorption_signal=np.asarray(payload["integrated_curves"]["absorption_signal"], dtype=float),
+        absorption_signal=np.asarray(
+            payload["integrated_curves"]["absorption_signal"], dtype=float
+        ),
         area_signal=np.asarray(payload["integrated_curves"]["area_signal"], dtype=float),
         steps=payload["integrated_curves"]["steps"],
     )
@@ -67,17 +69,25 @@ def load_esr_analysis_result(path: Path) -> AnalysisResult:
         selected_mode=payload["fit_selection"]["selected_mode"],
         fit_decision=_load_fit_decision(payload["fit_selection"]["decision"]),
         single_fit=_load_fit_result(payload["fit_selection"]["single_fit"]),
-        single_fit_attempts=[_load_fit_attempt(item) for item in payload["fit_selection"]["single_fit_attempts"]],
+        single_fit_attempts=[
+            _load_fit_attempt(item) for item in payload["fit_selection"]["single_fit_attempts"]
+        ],
         peak_fits=[_load_peak_fit(item) for item in payload["fit_selection"]["peak_fits"]],
-        selected_fit_signal=np.asarray(payload["fit_selection"]["selected_fit_signal"], dtype=float),
+        selected_fit_signal=np.asarray(
+            payload["fit_selection"]["selected_fit_signal"], dtype=float
+        ),
         selected_residual=np.asarray(payload["fit_selection"]["selected_residual"], dtype=float),
         total_integral=_load_integral(payload["integral_summaries"]["total"]),
         fit_local_total_integral=_load_integral(payload["integral_summaries"]["fit_local_total"]),
         local_total_integral=_load_integral(payload["integral_summaries"]["local_total"]),
         diagnostic_total_integral=_load_integral(payload["integral_summaries"]["diagnostic_total"]),
         peak_integrals=[_load_integral(item) for item in payload["integral_summaries"]["peaks"]],
-        fit_local_peak_integrals=[_load_integral(item) for item in payload["integral_summaries"]["fit_local_peaks"]],
-        local_peak_integrals=[_load_integral(item) for item in payload["integral_summaries"]["local_peaks"]],
+        fit_local_peak_integrals=[
+            _load_integral(item) for item in payload["integral_summaries"]["fit_local_peaks"]
+        ],
+        local_peak_integrals=[
+            _load_integral(item) for item in payload["integral_summaries"]["local_peaks"]
+        ],
         fit_local_disagreement_ratio=payload["qc"]["fit_local_disagreement_ratio"],
         fit_local_disagreement_flag=payload["qc"]["fit_local_disagreement_flag"],
         fit_local_disagreement_reason=payload["qc"]["fit_local_disagreement_reason"],
@@ -91,24 +101,34 @@ def load_esr_analysis_result(path: Path) -> AnalysisResult:
     )
 
 
-def build_esr_report(input_path: Path, output_path: Path | None = None, *, recursive: bool = True) -> Path:
+def build_esr_report(
+    input_path: Path, output_path: Path | None = None, *, recursive: bool = True
+) -> Path:
     """Generate a Markdown report from saved ESR JSON analyses."""
 
     resolved_input = input_path.resolve()
     if resolved_input.is_file():
         payload = json.loads(resolved_input.read_text(encoding="utf-8"))
-        destination = output_path.resolve() if output_path is not None else resolved_input.with_name(
-            f"{resolved_input.stem.replace('_analysis', '')}_report.md"
+        destination = (
+            output_path.resolve()
+            if output_path is not None
+            else resolved_input.with_name(
+                f"{resolved_input.stem.replace('_analysis', '')}_report.md"
+            )
         )
         destination.write_text(_build_single_report(payload), encoding="utf-8")
         return destination
 
     json_paths = sorted(
-        resolved_input.rglob("*_analysis.json") if recursive else resolved_input.glob("*_analysis.json"),
+        resolved_input.rglob("*_analysis.json")
+        if recursive
+        else resolved_input.glob("*_analysis.json"),
         key=lambda path: str(path).lower(),
     )
     payloads = [json.loads(path.read_text(encoding="utf-8")) for path in json_paths]
-    destination = output_path.resolve() if output_path is not None else resolved_input / "batch_report.md"
+    destination = (
+        output_path.resolve() if output_path is not None else resolved_input / "batch_report.md"
+    )
     destination.write_text(_build_batch_report(payloads), encoding="utf-8")
     return destination
 
@@ -150,7 +170,9 @@ def export_esr_batch_overlay_figure(
         )
 
     exported_paths: dict[str, Path] = {}
-    for group_key, entries in sorted(grouped_entries.items(), key=lambda item: _esr_group_sort_key(item[0])):
+    for group_key, entries in sorted(
+        grouped_entries.items(), key=lambda item: _esr_group_sort_key(item[0])
+    ):
         sample_id, frequency_GHz, replicate_id = group_key
         ordered_entries = sorted(
             entries,
@@ -200,7 +222,9 @@ def _load_fit_result(payload: dict[str, Any] | None) -> FitResult | None:
         },
         convergence=ConvergenceSummary(**payload["convergence"]),
         residual_summary=ResidualSummary(**payload["residual_summary"]),
-        feature_summary=None if payload["feature_summary"] is None else FeatureSummary(**payload["feature_summary"]),
+        feature_summary=None
+        if payload["feature_summary"] is None
+        else FeatureSummary(**payload["feature_summary"]),
         bound_hits=payload["bound_hits"],
         success=payload["success"],
     )
@@ -211,7 +235,9 @@ def _load_fit_attempt(payload: dict[str, Any]) -> FitAttemptRecord:
     return FitAttemptRecord(
         scope=payload["scope"],
         fit=_load_fit_result(payload["fit"]),
-        source_window=None if source_window is None else PeakWindow(label="window", **source_window),
+        source_window=None
+        if source_window is None
+        else PeakWindow(label="window", **source_window),
         accepted=payload["accepted"],
         rejection_reason=payload["rejection_reason"],
         selected_for_primary=payload["selected_for_primary"],
@@ -251,7 +277,9 @@ def _load_integral(payload: dict[str, Any]) -> IntegralSummary:
         integration_kind=payload["integration_kind"],
         window_source=payload["window_source"],
         baseline_polyorder=payload["baseline_polyorder"],
-        integration_window_clipped_by_detected_window=payload["integration_window_clipped_by_detected_window"],
+        integration_window_clipped_by_detected_window=payload[
+            "integration_window_clipped_by_detected_window"
+        ],
     )
 
 
@@ -279,7 +307,9 @@ def _load_windowed_integrated(payload: dict[str, Any] | None) -> PrimaryIntegrat
         integration_kind=payload["integration_kind"],
         window_source=payload["window_source"],
         baseline_polyorder=payload["baseline_polyorder"],
-        integration_window_clipped_by_detected_window=payload["integration_window_clipped_by_detected_window"],
+        integration_window_clipped_by_detected_window=payload[
+            "integration_window_clipped_by_detected_window"
+        ],
         model_name=payload.get("model_name"),
     )
 
@@ -305,7 +335,8 @@ def _build_single_report(payload: dict[str, Any]) -> str:
         "## Diagnostics",
         "",
         f"- Total area integral: `{payload['integral_summaries']['total']['area_integral']}`",
-        f"- Diagnostic full-span area integral: `{payload['integral_summaries']['diagnostic_total']['area_integral']}`",
+        "- Diagnostic full-span area integral: "
+        f"`{payload['integral_summaries']['diagnostic_total']['area_integral']}`",
         f"- Fit/local disagreement flag: `{payload['qc']['fit_local_disagreement_flag']}`",
     ]
     return "\n".join(lines) + "\n"
@@ -353,7 +384,9 @@ def _export_esr_group_figure(
         analysis = entry["analysis"]
         processed_signal = np.asarray(analysis.processed.signal, dtype=float)
         field_mT = np.asarray(analysis.processed.field_mT, dtype=float)
-        plotted_signal = processed_signal if plot_mode == "overlay" else processed_signal + index * offset_step
+        plotted_signal = (
+            processed_signal if plot_mode == "overlay" else processed_signal + index * offset_step
+        )
         axis.plot(
             field_mT,
             plotted_signal,
@@ -364,7 +397,9 @@ def _export_esr_group_figure(
 
     axis.set_title(_esr_group_title(sample_id, frequency_GHz, replicate_id, plot_mode))
     axis.set_xlabel("Field (mT)")
-    axis.set_ylabel("Processed derivative" if plot_mode == "overlay" else "Processed derivative + offset")
+    axis.set_ylabel(
+        "Processed derivative" if plot_mode == "overlay" else "Processed derivative + offset"
+    )
     axis.grid(alpha=0.2)
     _place_esr_group_legend(figure, axis, len(entries))
     figure.tight_layout(rect=(0.03, 0.12, 0.98, 0.98))
@@ -429,14 +464,18 @@ def _esr_angle_display_label(filename_tokens: dict[str, Any]) -> str:
     return f"{angle_deg:.3g} deg"
 
 
-def _esr_group_title(sample_id: str, frequency_GHz: float | None, replicate_id: str, plot_mode: str) -> str:
+def _esr_group_title(
+    sample_id: str, frequency_GHz: float | None, replicate_id: str, plot_mode: str
+) -> str:
     frequency_label = "" if frequency_GHz is None else f", {frequency_GHz:.3f} GHz"
     if plot_mode == "overlay":
         return f"ESR Angle Overlay ({sample_id}, {replicate_id}{frequency_label})"
     return f"ESR Processed Derivative Offset ({sample_id}, {replicate_id}{frequency_label})"
 
 
-def _esr_group_sort_key(group_key: tuple[str, float | None, str]) -> tuple[str, float, tuple[int, str]]:
+def _esr_group_sort_key(
+    group_key: tuple[str, float | None, str],
+) -> tuple[str, float, tuple[int, str]]:
     sample_id, frequency_GHz, replicate_id = group_key
     return (
         sample_id.lower(),

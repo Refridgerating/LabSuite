@@ -20,7 +20,11 @@ def subtract_linear_edge_baseline(
     slope, intercept = np.polyfit(edge_field, edge_signal, deg=1)
     baseline = slope * field + intercept
     corrected = signal - baseline
-    return corrected, baseline, {"edge_points": float(edge_points), "slope": float(slope), "intercept": float(intercept)}
+    return (
+        corrected,
+        baseline,
+        {"edge_points": float(edge_points), "slope": float(slope), "intercept": float(intercept)},
+    )
 
 
 def subtract_edge_baseline(signal: np.ndarray, edge_points: int) -> tuple[np.ndarray, float]:

@@ -14,7 +14,9 @@ def savgol_smooth(
     """Apply a Savitzky-Golay smoother while resolving a valid odd window length."""
 
     resolved_window = _resolve_window_length(signal.size, window_length, polyorder)
-    return savgol_filter(signal, window_length=resolved_window, polyorder=polyorder), resolved_window
+    return savgol_filter(
+        signal, window_length=resolved_window, polyorder=polyorder
+    ), resolved_window
 
 
 def _resolve_window_length(size: int, requested: int, polyorder: int) -> int:

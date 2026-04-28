@@ -13,8 +13,6 @@ SRC_ROOT = PROJECT_ROOT / "src"
 if str(SRC_ROOT) not in sys.path:
     sys.path.insert(0, str(SRC_ROOT))
 
-from labsuite.plugins.esr.fitters import derivative_lorentzian
-
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser()
@@ -28,6 +26,8 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main() -> int:
+    from labsuite.plugins.esr.fitters import derivative_lorentzian
+
     args = build_parser().parse_args()
     descriptor_path = args.output.resolve()
     descriptor_path.parent.mkdir(parents=True, exist_ok=True)

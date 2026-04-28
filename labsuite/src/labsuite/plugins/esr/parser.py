@@ -44,7 +44,8 @@ def parse_esr_file(path: Path) -> TraceDataset:
     signal = np.fromfile(dta_path, dtype="<f8")
     if signal.size != point_count:
         raise ParseError(
-            f"Bruker data length mismatch for {dta_path.name}: expected {point_count} points, got {signal.size}"
+            f"Bruker data length mismatch for {dta_path.name}: expected {point_count} "
+            f"points, got {signal.size}"
         )
 
     metadata = _build_metadata(descriptor_items, descriptor_map, dta_path, point_count)
@@ -81,7 +82,8 @@ def _validate_descriptor(descriptor_map: dict[str, str], path: Path) -> None:
         actual = descriptor_map.get(key)
         if actual != expected:
             raise ParseError(
-                f"Unsupported Bruker descriptor in {path.name}: expected {key}={expected!r}, got {actual!r}"
+                f"Unsupported Bruker descriptor in {path.name}: expected "
+                f"{key}={expected!r}, got {actual!r}"
             )
 
 
@@ -129,7 +131,9 @@ def _build_metadata(
             "frequency_hz": frequency_hz,
             "frequency_GHz": None if frequency_hz is None else frequency_hz / 1e9,
             "microwave_power_watts": microwave_power_watts,
-            "microwave_power_mW": None if microwave_power_watts is None else microwave_power_watts * 1_000.0,
+            "microwave_power_mW": None
+            if microwave_power_watts is None
+            else microwave_power_watts * 1_000.0,
             "modulation_amplitude_t": modulation_amplitude_t,
             "modulation_amplitude_mT": None
             if modulation_amplitude_t is None
