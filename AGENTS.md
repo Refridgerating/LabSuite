@@ -191,6 +191,7 @@ When adding code:
 - add tests for parsers, preprocessing, fits, and derived parameters
 - document assumptions explicitly
 - avoid silent corrections
+- Use ruff to check work
 
 When uncertain about placement:
 - ask whether the code is presentation, shared infrastructure, or modality-specific science
