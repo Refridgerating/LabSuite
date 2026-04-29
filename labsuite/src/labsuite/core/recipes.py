@@ -50,6 +50,21 @@ class VsmPreprocessingRecipe:
     """Recipe for the first VSM loop-processing path."""
 
     name: str = "vsm-default"
+    vsm_quality_model: str = "simple"
+    vsm_min_weight: float = 0.45
+    vsm_accept_downweighted: bool = True
+    vsm_hcut_fractions: list[float] = field(
+        default_factory=lambda: [0.15, 0.20, 0.25, 0.30]
+    )
+    vsm_quality_slope_downweight_ratio: float = 0.20
+    vsm_quality_slope_extreme_ratio: float = 2.0
+    vsm_quality_symmetry_downweight_error: float = 0.20
+    vsm_quality_symmetry_catastrophic_error: float = 0.80
+    vsm_quality_cutoff_cv_downweight: float = 0.15
+    vsm_quality_cutoff_cv_extreme: float = 0.60
+    vsm_quality_tail_rmse_downweight_ratio: float = 0.08
+    vsm_quality_tail_rmse_extreme_ratio: float = 0.50
+    vsm_quality_near_zero_ms_emu: float = 1e-18
     background_tail_fraction: float = 0.12
     background_min_points_per_side: int = 24
     background_tail_fit_min_r_squared: float = 0.6
@@ -151,8 +166,34 @@ class FmrRecipe:
     smoothing_window: int = 7
     smoothing_polyorder: int = 2
     fit_mode: str = "auto"
+    n_peaks: str = "auto"
     trace_fit_model: str = "mixed_derivative_lorentzian"
-    physics_model: str = "ip_field_swept_kittel"
+    physics_model: str = "ip_simple"
+    background_model: str = "linear"
+    multi_peak_selection: str = "bic"
+    min_peak_separation_mT: float = 4.0
+    min_linewidth_mT: float | None = None
+    max_linewidth_mT: float | None = None
+    enable_branch_tracking: bool = False
+    plot_component_fits: bool = False
+    fit_g: bool = False
+    fit_g_diagnostic: bool = False
+    compare_locked_vs_floating_g: bool = False
+    fit_Hk: bool = False
+    branch_locked_g: dict[str, float] = field(default_factory=dict)
+    branch_locked_gamma_over_2pi_GHz_per_T: dict[str, float] = field(default_factory=dict)
+    branch_locked_Hk_mT: dict[str, float] = field(default_factory=dict)
+    floating_g_warning_percent_threshold: float = 2.0
+    field_polarity: str = "unknown"
+    geometry: str = "unknown"
+    replicate_id: str | None = None
+    measurement_id: str | None = None
+    frequency_match_tolerance_GHz: float = 0.001
+    allow_low_confidence_pos_neg_matching: bool = False
+    prefer_pos_neg_matched_average: bool = False
+    joint_pos_neg_matched_fit: bool = False
+    fit_field_offset: bool = False
+    linewidth_min_high_confidence_points: int = 4
     peak_min_prominence_ratio: float = 0.2
     peak_min_distance_mT: float = 8.0
     peak_min_pair_width_mT: float = 4.0
@@ -238,6 +279,37 @@ def load_vsm_recipe(path: Path) -> VsmPreprocessingRecipe:
     payload = _load_mapping(path)
     recipe = VsmPreprocessingRecipe(
         name=str(payload.get("name", "vsm-default")),
+        vsm_quality_model=str(payload.get("vsm_quality_model", "simple")),
+        vsm_min_weight=float(payload.get("vsm_min_weight", 0.45)),
+        vsm_accept_downweighted=bool(payload.get("vsm_accept_downweighted", True)),
+        vsm_hcut_fractions=_float_list(
+            payload.get("vsm_hcut_fractions", [0.15, 0.20, 0.25, 0.30])
+        ),
+        vsm_quality_slope_downweight_ratio=float(
+            payload.get("vsm_quality_slope_downweight_ratio", 0.20)
+        ),
+        vsm_quality_slope_extreme_ratio=float(
+            payload.get("vsm_quality_slope_extreme_ratio", 2.0)
+        ),
+        vsm_quality_symmetry_downweight_error=float(
+            payload.get("vsm_quality_symmetry_downweight_error", 0.20)
+        ),
+        vsm_quality_symmetry_catastrophic_error=float(
+            payload.get("vsm_quality_symmetry_catastrophic_error", 0.80)
+        ),
+        vsm_quality_cutoff_cv_downweight=float(
+            payload.get("vsm_quality_cutoff_cv_downweight", 0.15)
+        ),
+        vsm_quality_cutoff_cv_extreme=float(
+            payload.get("vsm_quality_cutoff_cv_extreme", 0.60)
+        ),
+        vsm_quality_tail_rmse_downweight_ratio=float(
+            payload.get("vsm_quality_tail_rmse_downweight_ratio", 0.08)
+        ),
+        vsm_quality_tail_rmse_extreme_ratio=float(
+            payload.get("vsm_quality_tail_rmse_extreme_ratio", 0.50)
+        ),
+        vsm_quality_near_zero_ms_emu=float(payload.get("vsm_quality_near_zero_ms_emu", 1e-18)),
         background_tail_fraction=float(payload.get("background_tail_fraction", 0.12)),
         background_min_points_per_side=int(payload.get("background_min_points_per_side", 24)),
         background_tail_fit_min_r_squared=float(
@@ -372,8 +444,48 @@ def load_fmr_recipe(path: Path) -> FmrRecipe:
         smoothing_window=int(payload.get("smoothing_window", 7)),
         smoothing_polyorder=int(payload.get("smoothing_polyorder", 2)),
         fit_mode=str(payload.get("fit_mode", "auto")),
+        n_peaks=str(payload.get("n_peaks", payload.get("n-peaks", "auto"))),
         trace_fit_model=str(payload.get("trace_fit_model", "mixed_derivative_lorentzian")),
-        physics_model=str(payload.get("physics_model", "ip_field_swept_kittel")),
+        physics_model=str(payload.get("physics_model", "ip_simple")),
+        background_model=str(payload.get("background_model", "linear")),
+        multi_peak_selection=str(payload.get("multi_peak_selection", "bic")),
+        min_peak_separation_mT=float(
+            payload.get("min_peak_separation_mT", payload.get("peak_min_pair_width_mT", 4.0))
+        ),
+        min_linewidth_mT=_optional_float_value(payload.get("min_linewidth_mT")),
+        max_linewidth_mT=_optional_float_value(payload.get("max_linewidth_mT")),
+        enable_branch_tracking=bool(payload.get("enable_branch_tracking", False)),
+        plot_component_fits=bool(payload.get("plot_component_fits", False)),
+        fit_g=bool(payload.get("fit_g", False)),
+        fit_g_diagnostic=bool(payload.get("fit_g_diagnostic", False)),
+        compare_locked_vs_floating_g=bool(payload.get("compare_locked_vs_floating_g", False)),
+        fit_Hk=bool(payload.get("fit_Hk", False)),
+        branch_locked_g=_float_dict(payload.get("branch_locked_g")),
+        branch_locked_gamma_over_2pi_GHz_per_T=_float_dict(
+            payload.get("branch_locked_gamma_over_2pi_GHz_per_T")
+        ),
+        branch_locked_Hk_mT=_float_dict(payload.get("branch_locked_Hk_mT")),
+        floating_g_warning_percent_threshold=float(
+            payload.get("floating_g_warning_percent_threshold", 2.0)
+        ),
+        field_polarity=str(payload.get("field_polarity", "unknown")),
+        geometry=str(payload.get("geometry", "unknown")),
+        replicate_id=_optional_recipe_str(payload.get("replicate_id")),
+        measurement_id=_optional_recipe_str(payload.get("measurement_id")),
+        frequency_match_tolerance_GHz=float(
+            payload.get("frequency_match_tolerance_GHz", 0.001)
+        ),
+        allow_low_confidence_pos_neg_matching=bool(
+            payload.get("allow_low_confidence_pos_neg_matching", False)
+        ),
+        prefer_pos_neg_matched_average=bool(
+            payload.get("prefer_pos_neg_matched_average", False)
+        ),
+        joint_pos_neg_matched_fit=bool(payload.get("joint_pos_neg_matched_fit", False)),
+        fit_field_offset=bool(payload.get("fit_field_offset", False)),
+        linewidth_min_high_confidence_points=int(
+            payload.get("linewidth_min_high_confidence_points", 4)
+        ),
         peak_min_prominence_ratio=float(payload.get("peak_min_prominence_ratio", 0.2)),
         peak_min_distance_mT=float(payload.get("peak_min_distance_mT", 8.0)),
         peak_min_pair_width_mT=float(payload.get("peak_min_pair_width_mT", 4.0)),
@@ -468,6 +580,38 @@ def _string_list(value: Any) -> list[str]:
     if isinstance(value, list):
         return [str(part).strip() for part in value if str(part).strip()]
     return [str(value).strip()]
+
+
+def _float_list(value: Any) -> list[float]:
+    if value is None:
+        return []
+    if isinstance(value, str):
+        return [float(part.strip()) for part in value.split(",") if part.strip()]
+    if isinstance(value, list):
+        return [float(part) for part in value]
+    return [float(value)]
+
+
+def _optional_float_value(value: Any) -> float | None:
+    if value in {None, ""}:
+        return None
+    return float(value)
+
+
+def _float_dict(value: Any) -> dict[str, float]:
+    if value is None:
+        return {}
+    if isinstance(value, dict):
+        return {str(key): float(item) for key, item in value.items()}
+    if isinstance(value, str):
+        output: dict[str, float] = {}
+        for item in value.split(","):
+            if not item.strip():
+                continue
+            key, raw_value = item.split(":", maxsplit=1)
+            output[key.strip()] = float(raw_value)
+        return output
+    raise RecipeError(f"Expected branch value mapping, got: {value!r}")
 
 
 def _optional_recipe_str(value: Any) -> str | None:
@@ -571,6 +715,52 @@ def _validate_recipe(recipe: EsrPreprocessingRecipe) -> None:
 
 
 def _validate_vsm_recipe(recipe: VsmPreprocessingRecipe) -> None:
+    if recipe.vsm_quality_model not in {"simple", "legacy"}:
+        raise RecipeError("vsm_quality_model must be one of: simple, legacy")
+    if not 0.0 <= recipe.vsm_min_weight <= 1.0:
+        raise RecipeError("vsm_min_weight must be between 0 and 1")
+    if not recipe.vsm_hcut_fractions:
+        raise RecipeError("vsm_hcut_fractions must contain at least one value")
+    if any(not 0.0 < fraction < 0.5 for fraction in recipe.vsm_hcut_fractions):
+        raise RecipeError("vsm_hcut_fractions values must be between 0 and 0.5")
+    if recipe.vsm_quality_slope_downweight_ratio <= 0.0:
+        raise RecipeError("vsm_quality_slope_downweight_ratio must be positive")
+    if (
+        recipe.vsm_quality_slope_extreme_ratio
+        <= recipe.vsm_quality_slope_downweight_ratio
+    ):
+        raise RecipeError(
+            "vsm_quality_slope_extreme_ratio must exceed "
+            "vsm_quality_slope_downweight_ratio"
+        )
+    if recipe.vsm_quality_symmetry_downweight_error <= 0.0:
+        raise RecipeError("vsm_quality_symmetry_downweight_error must be positive")
+    if (
+        recipe.vsm_quality_symmetry_catastrophic_error
+        <= recipe.vsm_quality_symmetry_downweight_error
+    ):
+        raise RecipeError(
+            "vsm_quality_symmetry_catastrophic_error must exceed "
+            "vsm_quality_symmetry_downweight_error"
+        )
+    if recipe.vsm_quality_cutoff_cv_downweight <= 0.0:
+        raise RecipeError("vsm_quality_cutoff_cv_downweight must be positive")
+    if recipe.vsm_quality_cutoff_cv_extreme <= recipe.vsm_quality_cutoff_cv_downweight:
+        raise RecipeError(
+            "vsm_quality_cutoff_cv_extreme must exceed vsm_quality_cutoff_cv_downweight"
+        )
+    if recipe.vsm_quality_tail_rmse_downweight_ratio <= 0.0:
+        raise RecipeError("vsm_quality_tail_rmse_downweight_ratio must be positive")
+    if (
+        recipe.vsm_quality_tail_rmse_extreme_ratio
+        <= recipe.vsm_quality_tail_rmse_downweight_ratio
+    ):
+        raise RecipeError(
+            "vsm_quality_tail_rmse_extreme_ratio must exceed "
+            "vsm_quality_tail_rmse_downweight_ratio"
+        )
+    if recipe.vsm_quality_near_zero_ms_emu <= 0.0:
+        raise RecipeError("vsm_quality_near_zero_ms_emu must be positive")
     if not 0.0 < recipe.background_tail_fraction < 0.5:
         raise RecipeError("background_tail_fraction must be between 0 and 0.5")
     if recipe.background_min_points_per_side < 2:
@@ -695,10 +885,23 @@ def _validate_fmr_recipe(recipe: FmrRecipe) -> None:
             raise RecipeError("smoothing_polyorder must be smaller than smoothing_window")
     if recipe.fit_mode not in {"auto", "single", "double"}:
         raise RecipeError("fit_mode must be one of: auto, single, double")
+    if recipe.n_peaks not in {"auto", "1", "2", "3"}:
+        raise RecipeError("n_peaks must be one of: auto, 1, 2, 3")
     if recipe.trace_fit_model != "mixed_derivative_lorentzian":
         raise RecipeError("trace_fit_model must be 'mixed_derivative_lorentzian'")
-    if recipe.physics_model != "ip_field_swept_kittel":
-        raise RecipeError("physics_model must be 'ip_field_swept_kittel'")
+    if recipe.physics_model not in {
+        "ip_simple",
+        "ip_with_Hk",
+        "oop_simple",
+        "ip_field_swept_kittel",
+    }:
+        raise RecipeError(
+            "physics_model must be one of: ip_simple, ip_with_Hk, oop_simple"
+        )
+    if recipe.background_model not in {"linear", "quadratic"}:
+        raise RecipeError("background_model must be one of: linear, quadratic")
+    if recipe.multi_peak_selection not in {"aic", "bic", "residual"}:
+        raise RecipeError("multi_peak_selection must be one of: aic, bic, residual")
     if recipe.peak_min_prominence_ratio <= 0.0:
         raise RecipeError("peak_min_prominence_ratio must be positive")
     if recipe.peak_min_distance_mT <= 0.0:
@@ -709,8 +912,20 @@ def _validate_fmr_recipe(recipe: FmrRecipe) -> None:
         raise RecipeError("candidate_window_padding_width_multiplier must be zero or positive")
     if not 0.0 <= recipe.double_fit_min_improvement_ratio <= 1.0:
         raise RecipeError("double_fit_min_improvement_ratio must be between 0 and 1")
-    if recipe.max_resonance_count != 2:
-        raise RecipeError("max_resonance_count must be 2 for FMR v1")
+    if recipe.max_resonance_count not in {1, 2, 3}:
+        raise RecipeError("max_resonance_count must be 1, 2, or 3")
+    if recipe.min_peak_separation_mT < 0.0:
+        raise RecipeError("min_peak_separation_mT must be zero or positive")
+    if recipe.min_linewidth_mT is not None and recipe.min_linewidth_mT <= 0.0:
+        raise RecipeError("min_linewidth_mT must be positive")
+    if recipe.max_linewidth_mT is not None and recipe.max_linewidth_mT <= 0.0:
+        raise RecipeError("max_linewidth_mT must be positive")
+    if (
+        recipe.min_linewidth_mT is not None
+        and recipe.max_linewidth_mT is not None
+        and recipe.min_linewidth_mT >= recipe.max_linewidth_mT
+    ):
+        raise RecipeError("min_linewidth_mT must be smaller than max_linewidth_mT")
     if not 0.0 <= recipe.field_guard_fraction < 0.5:
         raise RecipeError("field_guard_fraction must be between 0 and 0.5")
     if not 0.0 < recipe.linewidth_max_sweep_fraction <= 1.0:
@@ -733,6 +948,14 @@ def _validate_fmr_recipe(recipe: FmrRecipe) -> None:
         raise RecipeError("kittel_min_points must be at least 3")
     if recipe.linewidth_min_points < 2:
         raise RecipeError("linewidth_min_points must be at least 2")
+    if recipe.linewidth_min_high_confidence_points < 2:
+        raise RecipeError("linewidth_min_high_confidence_points must be at least 2")
+    if str(recipe.field_polarity).lower() not in {"positive", "negative", "unknown"}:
+        raise RecipeError("field_polarity must be positive, negative, or unknown")
+    if str(recipe.geometry).lower() not in {"ip", "oop", "angular", "unknown"}:
+        raise RecipeError("geometry must be IP, OOP, angular, or unknown")
+    if recipe.frequency_match_tolerance_GHz < 0.0:
+        raise RecipeError("frequency_match_tolerance_GHz must be zero or positive")
     correction = recipe.field_polarity_correction
     if correction.method != "gonzalez_fuentes_average":
         raise RecipeError("field_polarity_correction.method must be 'gonzalez_fuentes_average'")

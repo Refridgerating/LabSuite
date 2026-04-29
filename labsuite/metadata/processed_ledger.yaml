@@ -1,5 +1,207 @@
 schema_version: 1
 processed_results:
+  ? fmr_MTJ-NoPattern_MTJ-2Ta5Co2NiFe0-5AlOx2NiFe-UnPatterned21APR2026-BroadbandSweep-R4-2Scotch-1000xingain-10xoutgain-500Hz---20260421-103152__2_default_2026-04-29T20_03_34Z
+  : result_id: fmr_MTJ-NoPattern_MTJ-2Ta5Co2NiFe0-5AlOx2NiFe-UnPatterned21APR2026-BroadbandSweep-R4-2Scotch-1000xingain-10xoutgain-500Hz---20260421-103152__2_default_2026-04-29T20_03_34Z
+    measurement_id: fmr:MTJ-NoPattern:MTJ(2Ta5Co2NiFe0,5AlOx2NiFe)UnPatterned21APR2026-BroadbandSweep-R4-2Scotch-1000xingain-10xoutgain-500Hz
+      - 20260421-103152__2
+    sample_id: MTJ-NoPattern
+    type: fmr
+    processed_path: F:\LabAnalysisSuite\labsuite\data\processed\fmr_external_import_test\MTJ(2Ta5Co2NiFe0,5AlOx2NiFe)UnPatterned21APR2026-BroadbandSweep-R4-2Scotch-1000xingain-10xoutgain-500Hz
+      - 20260421-103152\MTJ(2Ta5Co2NiFe0,5AlOx2NiFe)UnPatterned21APR2026-BroadbandSweep-R4-2Scotch-1000xingain-10xoutgain-500Hz
+      - 20260421-103152__2_analysis.json
+    recipe_path: F:\LabAnalysisSuite\labsuite\recipes\fmr\default.yaml
+    recipe_hash: 01d87a1dbadd0c2a0b2cc85b398baf0d678ca10db971a788cbf96513f1274183
+    created_at: '2026-04-29T20:03:34Z'
+    status: canonical
+    summary:
+      geometry: ip
+      g_mode: float
+      g_value: null
+      branches:
+      - single_unassigned
+      - mode_1
+      - mode_2
+      field_polarity_correction:
+        enabled: false
+        method: gonzalez_fuentes_average
+        polarity_column: null
+        require_pair: true
+        group_by:
+        - sample_id
+        - replicate_id
+        - frequency
+        - geometry
+        - mode_id
+        positive_labels:
+        - positive
+        - pos
+        - plus
+        - +H
+        negative_labels:
+        - negative
+        - neg
+        - minus
+        - -H
+        max_pair_frequency_tolerance_ghz: 0.001
+        max_pair_hres_split_mT: null
+        on_unpaired: warn_and_keep_raw
+        fit_field: Hres_avg
+        run_comparison_fits: true
+        plot_diagnostics: false
+  ? fmr_MTJ-NoPattern_MTJ-2Ta5Co2NiFe0-5AlOx2NiFe-UnPatterned21APR2026-BroadbandSweep-R4-2Scotch-1000xingain-10xoutgain-500Hz---20260421-103152__4_default_2026-04-29T22_03_26Z
+  : result_id: fmr_MTJ-NoPattern_MTJ-2Ta5Co2NiFe0-5AlOx2NiFe-UnPatterned21APR2026-BroadbandSweep-R4-2Scotch-1000xingain-10xoutgain-500Hz---20260421-103152__4_default_2026-04-29T22_03_26Z
+    measurement_id: fmr:MTJ-NoPattern:MTJ(2Ta5Co2NiFe0,5AlOx2NiFe)UnPatterned21APR2026-BroadbandSweep-R4-2Scotch-1000xingain-10xoutgain-500Hz
+      - 20260421-103152__4
+    sample_id: MTJ-NoPattern
+    type: fmr
+    processed_path: F:\LabAnalysisSuite\labsuite\data\processed\smoke_fmr-registryAndtightPeaks\MTJ(2Ta5Co2NiFe0,5AlOx2NiFe)UnPatterned21APR2026-BroadbandSweep-R4-2Scotch-1000xingain-10xoutgain-500Hz
+      - 20260421-103152__4_analysis.json
+    recipe_path: F:\LabAnalysisSuite\labsuite\recipes\fmr\default.yaml
+    recipe_hash: 524c1d98611dcf761dc5201bb5c3b64724bed1648a7f864b75d56e30d69de4c0
+    created_at: '2026-04-29T22:03:26Z'
+    status: canonical
+    summary:
+      geometry: ip
+      g_mode: float
+      g_value: null
+      branches:
+      - branch_1
+      - branch_2
+      - branch_3
+      - branch_4
+      - branch_5
+      - branch_6
+      - branch_7
+      - branch_8
+      - branch_9
+      - branch_10
+      - branch_11
+      - branch_12
+      - branch_13
+      - branch_14
+      field_polarity_correction:
+        enabled: false
+        method: gonzalez_fuentes_average
+        polarity_column: null
+        require_pair: true
+        group_by:
+        - sample_id
+        - replicate_id
+        - frequency
+        - geometry
+        - mode_id
+        positive_labels:
+        - positive
+        - pos
+        - plus
+        - +H
+        negative_labels:
+        - negative
+        - neg
+        - minus
+        - -H
+        max_pair_frequency_tolerance_ghz: 0.001
+        max_pair_hres_split_mT: null
+        on_unpaired: warn_and_keep_raw
+        fit_field: Hres_avg
+        run_comparison_fits: true
+        plot_diagnostics: false
+  ? fmr_MTJ-NoPattern_MTJ-2Ta5Co2NiFe0-5AlOx2NiFe-UnPatterned21APR2026-BroadbandSweep-R4-2Scotch-1000xingain-10xoutgain-500Hz---20260421-103152__5_default_2026-04-29T22_13_30Z
+  : result_id: fmr_MTJ-NoPattern_MTJ-2Ta5Co2NiFe0-5AlOx2NiFe-UnPatterned21APR2026-BroadbandSweep-R4-2Scotch-1000xingain-10xoutgain-500Hz---20260421-103152__5_default_2026-04-29T22_13_30Z
+    measurement_id: fmr:MTJ-NoPattern:MTJ(2Ta5Co2NiFe0,5AlOx2NiFe)UnPatterned21APR2026-BroadbandSweep-R4-2Scotch-1000xingain-10xoutgain-500Hz
+      - 20260421-103152__5
+    sample_id: MTJ-NoPattern
+    type: fmr
+    processed_path: F:\LabAnalysisSuite\labsuite\data\processed\smoke_fmr-registryAndtightPeaks\MTJ(2Ta5Co2NiFe0,5AlOx2NiFe)UnPatterned21APR2026-BroadbandSweep-R4-2Scotch-1000xingain-10xoutgain-500Hz
+      - 20260421-103152__5_analysis.json
+    recipe_path: F:\LabAnalysisSuite\labsuite\recipes\fmr\default.yaml
+    recipe_hash: 524c1d98611dcf761dc5201bb5c3b64724bed1648a7f864b75d56e30d69de4c0
+    created_at: '2026-04-29T22:13:30Z'
+    status: canonical
+    summary:
+      geometry: ip
+      g_mode: float
+      g_value: null
+      branches:
+      - branch_1
+      - branch_2
+      - branch_3
+      - branch_4
+      - branch_5
+      - branch_6
+      field_polarity_correction:
+        enabled: false
+        method: gonzalez_fuentes_average
+        polarity_column: null
+        require_pair: true
+        group_by:
+        - sample_id
+        - replicate_id
+        - frequency
+        - geometry
+        - mode_id
+        positive_labels:
+        - positive
+        - pos
+        - plus
+        - +H
+        negative_labels:
+        - negative
+        - neg
+        - minus
+        - -H
+        max_pair_frequency_tolerance_ghz: 0.001
+        max_pair_hres_split_mT: null
+        on_unpaired: warn_and_keep_raw
+        fit_field: Hres_avg
+        run_comparison_fits: true
+        plot_diagnostics: false
+  ? fmr_MTJ-NoPattern_MTJ-2Ta5Co2NiFe0-5AlOx2NiFe-UnPatterned21APR2026-BroadbandSweep-R4-2Scotch-1000xingain-10xoutgain-500Hz---20260421-103152__6_default_2026-04-29T22_58_19Z
+  : result_id: fmr_MTJ-NoPattern_MTJ-2Ta5Co2NiFe0-5AlOx2NiFe-UnPatterned21APR2026-BroadbandSweep-R4-2Scotch-1000xingain-10xoutgain-500Hz---20260421-103152__6_default_2026-04-29T22_58_19Z
+    measurement_id: fmr:MTJ-NoPattern:MTJ(2Ta5Co2NiFe0,5AlOx2NiFe)UnPatterned21APR2026-BroadbandSweep-R4-2Scotch-1000xingain-10xoutgain-500Hz
+      - 20260421-103152__6
+    sample_id: MTJ-NoPattern
+    type: fmr
+    processed_path: F:\LabAnalysisSuite\labsuite\data\processed\smoke_fmr-registryAndtightPeaks\MTJ(2Ta5Co2NiFe0,5AlOx2NiFe)UnPatterned21APR2026-BroadbandSweep-R4-2Scotch-1000xingain-10xoutgain-500Hz
+      - 20260421-103152__6_analysis.json
+    recipe_path: F:\LabAnalysisSuite\labsuite\recipes\fmr\default.yaml
+    recipe_hash: 524c1d98611dcf761dc5201bb5c3b64724bed1648a7f864b75d56e30d69de4c0
+    created_at: '2026-04-29T22:58:19Z'
+    status: canonical
+    summary:
+      geometry: ip
+      g_mode: float
+      g_value: null
+      branches:
+      - branch_1
+      - branch_2
+      field_polarity_correction:
+        enabled: false
+        method: gonzalez_fuentes_average
+        polarity_column: null
+        require_pair: true
+        group_by:
+        - sample_id
+        - replicate_id
+        - frequency
+        - geometry
+        - mode_id
+        positive_labels:
+        - positive
+        - pos
+        - plus
+        - +H
+        negative_labels:
+        - negative
+        - neg
+        - minus
+        - -H
+        max_pair_frequency_tolerance_ghz: 0.001
+        max_pair_hres_split_mT: null
+        on_unpaired: warn_and_keep_raw
+        fit_field: Hres_avg
+        run_comparison_fits: true
+        plot_diagnostics: false
   ? fmr_MTJ-NoPattern_MTJ-2Ta5Co2NiFe0-5AlOx2NiFe-UnPatterned21APR2026-BroadbandSweep-R4-2Scotch-1000xingain-10xoutgain-500Hz---20260421-103152_default_2026-04-28T22_07_31Z
   : result_id: fmr_MTJ-NoPattern_MTJ-2Ta5Co2NiFe0-5AlOx2NiFe-UnPatterned21APR2026-BroadbandSweep-R4-2Scotch-1000xingain-10xoutgain-500Hz---20260421-103152_default_2026-04-28T22_07_31Z
     measurement_id: fmr:MTJ-NoPattern:MTJ(2Ta5Co2NiFe0,5AlOx2NiFe)UnPatterned21APR2026-BroadbandSweep-R4-2Scotch-1000xingain-10xoutgain-500Hz
@@ -13,6 +215,54 @@ processed_results:
     recipe_hash: 01d87a1dbadd0c2a0b2cc85b398baf0d678ca10db971a788cbf96513f1274183
     created_at: '2026-04-28T22:07:31Z'
     status: canonical
+    summary:
+      geometry: ip
+      g_mode: float
+      g_value: null
+      branches:
+      - single_unassigned
+      - mode_1
+      - mode_2
+      field_polarity_correction:
+        enabled: false
+        method: gonzalez_fuentes_average
+        polarity_column: null
+        require_pair: true
+        group_by:
+        - sample_id
+        - replicate_id
+        - frequency
+        - geometry
+        - mode_id
+        positive_labels:
+        - positive
+        - pos
+        - plus
+        - +H
+        negative_labels:
+        - negative
+        - neg
+        - minus
+        - -H
+        max_pair_frequency_tolerance_ghz: 0.001
+        max_pair_hres_split_mT: null
+        on_unpaired: warn_and_keep_raw
+        fit_field: Hres_avg
+        run_comparison_fits: true
+        plot_diagnostics: false
+  ? fmr_MTJ-NoPattern_MTJ-2Ta5Co2NiFe0-5AlOx2NiFe-UnPatterned21APR2026-BroadbandSweep-R4-2Scotch-1000xingain-10xoutgain-500Hz---20260421-103152_default_2026-04-29T14_31_10Z
+  : result_id: fmr_MTJ-NoPattern_MTJ-2Ta5Co2NiFe0-5AlOx2NiFe-UnPatterned21APR2026-BroadbandSweep-R4-2Scotch-1000xingain-10xoutgain-500Hz---20260421-103152_default_2026-04-29T14_31_10Z
+    measurement_id: fmr:MTJ-NoPattern:MTJ(2Ta5Co2NiFe0,5AlOx2NiFe)UnPatterned21APR2026-BroadbandSweep-R4-2Scotch-1000xingain-10xoutgain-500Hz
+      - 20260421-103152
+    sample_id: MTJ-NoPattern
+    type: fmr
+    processed_path: F:\LabAnalysisSuite\labsuite\data\processed\fmr_external_import_test\MTJ(2Ta5Co2NiFe0,5AlOx2NiFe)UnPatterned21APR2026-BroadbandSweep-R4-2Scotch-1000xingain-10xoutgain-500Hz
+      - 20260421-103152\MTJ(2Ta5Co2NiFe0,5AlOx2NiFe)UnPatterned21APR2026-BroadbandSweep-R4-2Scotch-1000xingain-10xoutgain-500Hz
+      - 20260421-103152_analysis.json
+    recipe_path: F:\LabAnalysisSuite\labsuite\recipes\fmr\default.yaml
+    recipe_hash: 01d87a1dbadd0c2a0b2cc85b398baf0d678ca10db971a788cbf96513f1274183
+    created_at: '2026-04-29T14:31:10Z'
+    status: test
     summary:
       geometry: ip
       g_mode: float

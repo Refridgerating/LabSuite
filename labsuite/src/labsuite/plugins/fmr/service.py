@@ -34,6 +34,7 @@ from labsuite.core.resonance_metrics import (
     flatten_resonance_metrics,
 )
 from labsuite.core.sample_registry import AnalysisSampleContext
+from labsuite.plugins.fmr.branch_tracking import BranchTrackingConfig, assign_branches
 from labsuite.plugins.fmr.derived import build_fmr_series, fit_fmr_physics
 from labsuite.plugins.fmr.fitters import assess_trace_fit_quality, fit_fmr_trace
 from labsuite.plugins.fmr.models import (
@@ -82,6 +83,12 @@ def analyze_fmr_file(
     )
     g_mode = "float" if sample_context is None else sample_context.g_mode
     g_value = None if sample_context is None else sample_context.g_value
+    resolved_measurement_id = None if sample_context is None else sample_context.measurement_id
+    resolved_geometry = (
+        recipe.geometry
+        if sample_context is None or sample_context.geometry == "unknown"
+        else sample_context.geometry
+    )
 
     trace_fits: list[FmrTraceFitResult] = []
     processed_traces: list[dict[str, Any]] = []
@@ -89,6 +96,14 @@ def analyze_fmr_file(
     warnings = list(file_dataset.warnings)
     for trace in file_dataset.traces:
         selected_trace = _select_signal_channel(trace, recipe.signal_channel)
+        selected_trace = _attach_measurement_metadata(
+            selected_trace,
+            sample_id=resolved_sample_id,
+            measurement_id=resolved_measurement_id or recipe.measurement_id,
+            replicate_id=resolved_replicate_id or recipe.replicate_id,
+            geometry=resolved_geometry,
+            field_polarity=recipe.field_polarity,
+        )
         processed_trace = apply_fmr_preprocessing(selected_trace, recipe)
         fit_result = fit_fmr_trace(selected_trace, processed_trace, recipe)
         fit_result.sample_name = resolved_sample_id
@@ -99,8 +114,6 @@ def analyze_fmr_file(
         fit_result.rejection_reason = rejection_reason
         fit_result.warnings.extend(fit_warnings)
         fit_result.metadata["requested_signal_channel"] = recipe.signal_channel
-        _attach_fmr_resonance_metrics(fit_result, config=metrics_config)
-        resonance_metrics_rows.extend(_flatten_trace_resonance_metrics(fit_result))
         processed_traces.append(
             {
                 "trace_id": processed_trace.trace_id,
@@ -116,12 +129,23 @@ def analyze_fmr_file(
         if rejection_reason is not None:
             warnings.append(f"{selected_trace.trace_id}:{rejection_reason}")
 
+    if recipe.enable_branch_tracking:
+        assign_branches(
+            trace_fits,
+            config=BranchTrackingConfig(max_branches=_max_branch_count(recipe)),
+        )
+    else:
+        _assign_legacy_branch_ids(trace_fits)
+    for fit_result in trace_fits:
+        _attach_fmr_resonance_metrics(fit_result, config=metrics_config)
+        resonance_metrics_rows.extend(_flatten_trace_resonance_metrics(fit_result))
+
     series_collection = build_fmr_series(
         trace_fits,
         measurement_mode=file_dataset.measurement_mode,
         recipe=recipe,
         replicate_id=resolved_replicate_id,
-        geometry=None if sample_context is None else sample_context.geometry,
+        geometry=resolved_geometry,
     )
     physics_collection = fit_fmr_physics(series_collection, recipe, g_mode=g_mode, g_value=g_value)
     warnings.extend(series_collection.warnings)
@@ -157,6 +181,8 @@ def analyze_fmr_file(
             "temperature_K": file_dataset.nominal_temperature_K,
             "measurement_mode": file_dataset.measurement_mode,
             "registry_geometry": None if sample_context is None else sample_context.geometry,
+            "geometry": resolved_geometry,
+            "field_polarity": recipe.field_polarity,
             "registry_measurement_id": None
             if sample_context is None
             else sample_context.measurement_id,
@@ -173,6 +199,9 @@ def analyze_fmr_file(
         if sample_context is None
         else sample_context.measurement_id,
         "registry_geometry": None if sample_context is None else sample_context.geometry,
+        "geometry": resolved_geometry,
+        "field_polarity": recipe.field_polarity,
+        "measurement_id": resolved_measurement_id or recipe.measurement_id,
         "g_mode": g_mode,
         "g_value": g_value,
         "angle_deg": file_dataset.angle_deg,
@@ -325,10 +354,74 @@ def _apply_fmr_recipe_overrides(recipe: FmrRecipe, overrides: dict[str, Any]) ->
             correction.run_comparison_fits = bool(value)
         elif name == "plot_polarity_diagnostics":
             correction.plot_diagnostics = bool(value)
+        elif name == "n_peaks":
+            recipe.n_peaks = str(value)
+            recipe.max_resonance_count = 3 if str(value) == "auto" else int(value)
+        elif name == "min_peak_separation_mT":
+            recipe.min_peak_separation_mT = float(value)
+        elif name == "min_linewidth_mT":
+            recipe.min_linewidth_mT = float(value)
+        elif name == "max_linewidth_mT":
+            recipe.max_linewidth_mT = float(value)
+        elif name == "background_model":
+            recipe.background_model = str(value)
+        elif name == "multi_peak_selection":
+            recipe.multi_peak_selection = str(value)
+        elif name == "enable_branch_tracking":
+            recipe.enable_branch_tracking = bool(value)
+        elif name == "plot_component_fits":
+            recipe.plot_component_fits = bool(value)
+        elif name == "field_polarity":
+            recipe.field_polarity = str(value).lower()
+        elif name == "geometry":
+            recipe.geometry = str(value)
+        elif name == "replicate_id":
+            recipe.replicate_id = str(value)
+        elif name == "measurement_id":
+            recipe.measurement_id = str(value)
+        elif name == "frequency_match_tolerance_GHz":
+            recipe.frequency_match_tolerance_GHz = float(value)
+            correction.max_pair_frequency_tolerance_ghz = float(value)
+        elif name == "allow_low_confidence_pos_neg_matching":
+            recipe.allow_low_confidence_pos_neg_matching = bool(value)
+        elif name == "prefer_pos_neg_matched_average":
+            recipe.prefer_pos_neg_matched_average = bool(value)
+            correction.enabled = bool(value)
+        elif name == "joint_pos_neg_matched_fit":
+            recipe.joint_pos_neg_matched_fit = bool(value)
+        elif name == "fit_field_offset":
+            recipe.fit_field_offset = bool(value)
+        elif name == "branch_locked_g":
+            recipe.branch_locked_g.update(_parse_branch_float_options(value))
+        elif name == "branch_locked_gamma_over_2pi_GHz_per_T":
+            recipe.branch_locked_gamma_over_2pi_GHz_per_T.update(
+                _parse_branch_float_options(value)
+            )
+        elif name == "branch_locked_Hk_mT":
+            recipe.branch_locked_Hk_mT.update(_parse_branch_float_options(value))
+        elif name == "fit_g":
+            recipe.fit_g = bool(value)
+        elif name == "fit_g_diagnostic":
+            recipe.fit_g_diagnostic = bool(value)
+        elif name == "compare_locked_vs_floating_g":
+            recipe.compare_locked_vs_floating_g = bool(value)
+        elif name == "fit_Hk":
+            recipe.fit_Hk = bool(value)
 
 
 def _split_csv_option(value: str) -> list[str]:
     return [part.strip() for part in value.split(",") if part.strip()]
+
+
+def _parse_branch_float_options(value: Any) -> dict[str, float]:
+    if value is None:
+        return {}
+    values = value if isinstance(value, list) else [value]
+    parsed: dict[str, float] = {}
+    for item in values:
+        branch_id, raw_value = str(item).split(":", maxsplit=1)
+        parsed[branch_id.strip()] = float(raw_value)
+    return parsed
 
 
 def _select_signal_channel(trace, channel_name: str):
@@ -347,6 +440,56 @@ def _select_signal_channel(trace, channel_name: str):
     metadata = dict(trace.metadata)
     metadata["selected_signal_channel"] = channel_name
     return replace(trace, signal=np.asarray(selected_signal, dtype=float).copy(), metadata=metadata)
+
+
+def _attach_measurement_metadata(
+    trace,
+    *,
+    sample_id: str,
+    measurement_id: str | None,
+    replicate_id: str | None,
+    geometry: str | None,
+    field_polarity: str,
+):
+    metadata = dict(trace.metadata)
+    metadata["sample_id"] = sample_id
+    metadata["measurement_id"] = measurement_id
+    metadata["replicate_id"] = replicate_id
+    metadata["geometry"] = _normalize_geometry(geometry)
+    if field_polarity != "unknown" or metadata.get("field_polarity") is None:
+        metadata["field_polarity"] = field_polarity
+        metadata["field_polarity_raw"] = field_polarity
+    return replace(trace, sample_name=sample_id, metadata=metadata)
+
+
+def _assign_legacy_branch_ids(trace_fits: list[FmrTraceFitResult]) -> None:
+    for fit in trace_fits:
+        for component in fit.selected_components:
+            if component.branch_id is not None:
+                continue
+            if component.component_label == "single_unassigned":
+                branch_id = "single_unassigned"
+            else:
+                branch_id = component.component_label
+            component.branch_id = branch_id
+            component.confidence = component.confidence if component.accepted else "low"
+            component.metadata["branch_id"] = branch_id
+            component.metadata["branch_confidence"] = component.confidence
+
+
+def _max_branch_count(recipe: FmrRecipe) -> int:
+    if recipe.n_peaks in {"1", "2", "3"}:
+        return int(recipe.n_peaks)
+    return max(1, min(3, int(recipe.max_resonance_count)))
+
+
+def _normalize_geometry(value: str | None) -> str:
+    text = str(value or "unknown").strip()
+    if text.lower() == "ip":
+        return "IP"
+    if text.lower() == "oop":
+        return "OOP"
+    return text.lower()
 
 
 def _group_key(
@@ -462,10 +605,12 @@ def export_fmr_analysis_csv(
         "raw_signal",
         "processed_signal",
         "selected_fit_signal",
+        "background_signal",
         "residual",
         "single_unassigned_signal",
         "mode_1_signal",
         "mode_2_signal",
+        "mode_3_signal",
         "I",
         "Q",
         "fit_source",
@@ -501,10 +646,12 @@ def export_fmr_analysis_csv(
                         _format_value(raw_signal[index]),
                         _format_value(processed["signal"][index]),
                         _format_value(fit["fitted_signal"][index]),
+                        _format_optional_signal(fit.get("background_signal"), index),
                         _format_value(fit["residual"][index]),
                         _format_optional_signal(component_signals.get("single_unassigned"), index),
                         _format_optional_signal(component_signals.get("mode_1"), index),
                         _format_optional_signal(component_signals.get("mode_2"), index),
+                        _format_optional_signal(component_signals.get("mode_3"), index),
                         _format_optional_signal(raw_trace.get("i_signal"), index),
                         _format_optional_signal(raw_trace.get("q_signal"), index),
                         _format_optional_signal(raw_trace.get("fit_source_signal"), index),
@@ -533,12 +680,18 @@ def export_fmr_summary_csv(
         "trace_rejection_reason",
         "requested_mode",
         "selected_mode",
+        "n_peaks_selected",
+        "model_selection_method",
+        "background_model",
         "selection_reason",
         "candidate_window_count",
         "double_fit_improvement_ratio",
         "partial_component_qc",
         "component_label",
         "component_id",
+        "peak_index",
+        "branch_id",
+        "confidence",
         "component_accepted",
         "component_rejection_reason",
         "field_polarity",
@@ -551,6 +704,9 @@ def export_fmr_summary_csv(
         "Hres_avg_mT",
         "Hres_offset_mT",
         "Hres_split_mT",
+        "Hres_asymmetry_mT",
+        "matched_pair_id",
+        "matching_confidence",
         "fit_field",
         "model_name",
         "H_res_mT",
@@ -566,6 +722,11 @@ def export_fmr_summary_csv(
         "baseline_slope",
         "baseline_slope_stderr",
         "r_squared",
+        "fit_aic",
+        "fit_bic",
+        "fit_red_chi2",
+        "residual_rms",
+        "residual_structure_score",
         "rmse",
         "rss",
         "residual_rmse_fraction",
@@ -644,12 +805,19 @@ def export_fmr_summary_csv(
                         "trace_rejection_reason": fit["rejection_reason"],
                         "requested_mode": fit.get("requested_mode"),
                         "selected_mode": fit.get("selected_mode"),
+                        "n_peaks_selected": fit.get("n_peaks_selected"),
+                        "model_selection_method": fit.get("model_selection_method"),
+                        "background_model": fit.get("background_model"),
                         "selection_reason": fit.get("selection_reason"),
                         "candidate_window_count": fit.get("candidate_window_count"),
                         "double_fit_improvement_ratio": fit.get("double_fit_improvement_ratio"),
                         "partial_component_qc": fit.get("partial_component_qc"),
                         "component_label": component.get("component_label"),
                         "component_id": component.get("component_id"),
+                        "peak_index": component.get("peak_index"),
+                        "branch_id": component.get("branch_id")
+                        or component.get("metadata", {}).get("branch_id"),
+                        "confidence": component.get("confidence"),
                         "component_accepted": component.get("accepted"),
                         "component_rejection_reason": component.get("rejection_reason"),
                         "field_polarity": component.get("metadata", {}).get("field_polarity"),
@@ -678,6 +846,15 @@ def export_fmr_summary_csv(
                         "Hres_split_mT": polarity_point_by_component_id.get(
                             component.get("component_id"), {}
                         ).get("Hres_split_mT"),
+                        "Hres_asymmetry_mT": polarity_point_by_component_id.get(
+                            component.get("component_id"), {}
+                        ).get("Hres_asymmetry_mT"),
+                        "matched_pair_id": polarity_point_by_component_id.get(
+                            component.get("component_id"), {}
+                        ).get("matched_pair_id"),
+                        "matching_confidence": polarity_point_by_component_id.get(
+                            component.get("component_id"), {}
+                        ).get("matching_confidence"),
                         "fit_field": polarity_point_by_component_id.get(
                             component.get("component_id"), {}
                         ).get("fit_field"),
@@ -701,6 +878,11 @@ def export_fmr_summary_csv(
                         "baseline_slope": fit["parameters"].get("baseline_slope"),
                         "baseline_slope_stderr": _diagnostic_stderr(diagnostics, "baseline_slope"),
                         "r_squared": fit.get("r_squared", fit["metrics"].get("r_squared")),
+                        "fit_aic": fit.get("fit_aic"),
+                        "fit_bic": fit.get("fit_bic"),
+                        "fit_red_chi2": fit.get("fit_red_chi2"),
+                        "residual_rms": fit.get("residual_rms"),
+                        "residual_structure_score": fit.get("residual_structure_score"),
                         "rmse": fit["residual_summary"]["rmse"],
                         "rss": fit["residual_summary"]["rss"],
                         "residual_rmse_fraction": component.get("residual_rmse_fraction"),
@@ -863,6 +1045,95 @@ def export_fmr_series_csv(
     return destination
 
 
+def export_fmr_branch_diagnostics_csv(
+    result: MeasurementAnalysisResult | dict[str, Any], destination: Path
+) -> Path:
+    """Export one branch-level diagnostic row per branch fit."""
+
+    payload = _normalize_result(result)
+    collection = payload["analysis_payload"]["series_collection_result"]
+    physics_collection = payload["analysis_payload"]["physics_collection_result"]
+    fieldnames = [
+        "sample_id",
+        "branch_id",
+        "fit_mode",
+        "sweep_direction_basis",
+        "geometry",
+        "n_points",
+        "frequency_min_GHz",
+        "frequency_max_GHz",
+        "g_locked",
+        "g_fit",
+        "gamma_over_2pi_locked_GHz_per_T",
+        "gamma_over_2pi_fit_GHz_per_T",
+        "delta_g",
+        "percent_delta_g",
+        "mu0_Meff_T_locked_g",
+        "mu0_Meff_T_float_g",
+        "delta_mu0_Meff_T",
+        "mu0_Hk_T",
+        "alpha_eff",
+        "mu0_deltaH0_T",
+        "red_chi2",
+        "AIC",
+        "BIC",
+        "confidence",
+        "warning_flags",
+    ]
+    with destination.open("w", encoding="utf-8", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=fieldnames)
+        writer.writeheader()
+        for branch_id, series in collection.get("series_by_label", {}).items():
+            physics = physics_collection.get("physics_by_label", {}).get(branch_id) or {}
+            kittel = physics.get("kittel_fit") or {}
+            linewidth = physics.get("linewidth_fit") or {}
+            kittel_parameters = kittel.get("parameters", {})
+            linewidth_parameters = linewidth.get("parameters", {})
+            metrics = kittel.get("metrics", {})
+            frequencies = series.get("frequency_GHz", [])
+            polarity_points = series.get("metadata", {}).get("polarity_points", [])
+            first_polarity_point = polarity_points[0] if polarity_points else {}
+            writer.writerow(
+                {
+                    "sample_id": series.get("sample_name")
+                    or payload["summary_metrics"].get("sample_id"),
+                    "branch_id": branch_id,
+                    "fit_mode": kittel.get("model_name"),
+                    "sweep_direction_basis": series.get("metadata", {})
+                    .get("field_polarity_correction", {})
+                    .get("fit_field", "Hres"),
+                    "geometry": first_polarity_point.get("geometry"),
+                    "n_points": len(frequencies),
+                    "frequency_min_GHz": min(frequencies) if frequencies else None,
+                    "frequency_max_GHz": max(frequencies) if frequencies else None,
+                    "g_locked": kittel_parameters.get("g_locked"),
+                    "g_fit": kittel_parameters.get("g_fit") or kittel_parameters.get("g"),
+                    "gamma_over_2pi_locked_GHz_per_T": kittel_parameters.get(
+                        "gamma_over_2pi_locked_GHz_per_T"
+                    ),
+                    "gamma_over_2pi_fit_GHz_per_T": kittel_parameters.get(
+                        "gamma_over_2pi_GHz_per_T"
+                    ),
+                    "delta_g": kittel_parameters.get("delta_g"),
+                    "percent_delta_g": kittel_parameters.get("percent_delta_g"),
+                    "mu0_Meff_T_locked_g": kittel_parameters.get("mu0_Meff_T"),
+                    "mu0_Meff_T_float_g": kittel_parameters.get("mu0_Meff_T")
+                    if kittel_parameters.get("g_fit") is not None
+                    else None,
+                    "delta_mu0_Meff_T": None,
+                    "mu0_Hk_T": kittel_parameters.get("mu0_Hk_T"),
+                    "alpha_eff": linewidth_parameters.get("alpha_eff"),
+                    "mu0_deltaH0_T": linewidth_parameters.get("mu0_deltaH0_T"),
+                    "red_chi2": metrics.get("red_chi2"),
+                    "AIC": metrics.get("AIC"),
+                    "BIC": metrics.get("BIC"),
+                    "confidence": physics.get("metadata", {}).get("branch_confidence"),
+                    "warning_flags": "|".join(physics.get("warnings", [])),
+                }
+            )
+    return destination
+
+
 def export_fmr_analysis_figure(
     result: MeasurementAnalysisResult | dict[str, Any], destination: Path
 ) -> Path:
@@ -899,7 +1170,12 @@ def export_fmr_analysis_figure(
     if fits:
         axes[0].legend(loc="best", ncols=2)
 
-    series_colors = {"single_unassigned": "#1d4ed8", "mode_1": "#047857", "mode_2": "#b91c1c"}
+    series_colors = {
+        "single_unassigned": "#1d4ed8",
+        "mode_1": "#047857",
+        "mode_2": "#b91c1c",
+        "mode_3": "#c2410c",
+    }
     for label, series in collection.get("series_by_label", {}).items():
         if series["frequency_GHz"]:
             axes[1].scatter(
@@ -1095,11 +1371,13 @@ def export_fmr_bundle_from_json(
     summary_path = destination_dir / f"{stem}_summary.csv"
     figure_path = destination_dir / f"{stem}_figure.png"
     series_path = destination_dir / f"{stem}_series.csv"
+    branch_diagnostics_path = destination_dir / f"{stem}_branch_diagnostics.csv"
     polarity_path = destination_dir / f"{stem}_polarity_diagnostics.png"
     diagnostics_dir = destination_dir / "trace_diagnostics"
     export_fmr_analysis_csv(payload, csv_path)
     export_fmr_summary_csv(payload, summary_path)
     export_fmr_series_csv(payload, series_path)
+    export_fmr_branch_diagnostics_csv(payload, branch_diagnostics_path)
     export_fmr_analysis_figure(payload, figure_path)
     polarity_plot = None
     if (
@@ -1116,6 +1394,7 @@ def export_fmr_bundle_from_json(
         "summary_csv_path": summary_path,
         "figure_path": figure_path,
         "series_csv_path": series_path,
+        "branch_diagnostics_csv_path": branch_diagnostics_path,
         "polarity_diagnostics_path": polarity_plot,
         "trace_diagnostics_dir": diagnostics_dir,
     }
@@ -1313,6 +1592,17 @@ def _trace_fit_from_payload(payload: dict[str, Any]) -> FmrTraceFitResult:
         requested_mode=payload.get("requested_mode", "auto"),
         selected_mode=payload.get("selected_mode", "single"),
         selection_reason=payload.get("selection_reason", ""),
+        n_peaks_selected=payload.get("n_peaks_selected", 1),
+        model_selection_method=payload.get("model_selection_method", "residual"),
+        background_model=payload.get("background_model", "linear"),
+        fit_aic=payload.get("fit_aic"),
+        fit_bic=payload.get("fit_bic"),
+        fit_red_chi2=payload.get("fit_red_chi2"),
+        residual_rms=payload.get("residual_rms"),
+        residual_structure_score=payload.get("residual_structure_score"),
+        background_signal=None
+        if payload.get("background_signal") is None
+        else np.asarray(payload["background_signal"], dtype=float),
         candidate_window_count=payload.get("candidate_window_count", 0),
         double_fit_improvement_ratio=payload.get("double_fit_improvement_ratio"),
         double_fit_threshold=payload.get("double_fit_threshold"),
@@ -1366,6 +1656,16 @@ def _trace_model_from_payload(payload: dict[str, Any] | None) -> FmrTraceModelRe
         residual=np.asarray(payload["residual"], dtype=float),
         components=[_component_from_payload(item) for item in payload.get("components", [])],
         warnings=payload.get("warnings", []),
+        n_peaks=payload.get("n_peaks", 1),
+        background_model=payload.get("background_model", "linear"),
+        fit_aic=payload.get("fit_aic"),
+        fit_bic=payload.get("fit_bic"),
+        fit_red_chi2=payload.get("fit_red_chi2"),
+        residual_rms=payload.get("residual_rms"),
+        residual_structure_score=payload.get("residual_structure_score"),
+        background_signal=None
+        if payload.get("background_signal") is None
+        else np.asarray(payload["background_signal"], dtype=float),
     )
 
 
@@ -1384,6 +1684,9 @@ def _component_from_payload(payload: dict[str, Any]) -> FmrComponentFitResult:
         absorption_signal=None
         if payload.get("absorption_signal") is None
         else np.asarray(payload["absorption_signal"], dtype=float),
+        peak_index=payload.get("peak_index"),
+        branch_id=payload.get("branch_id"),
+        confidence=payload.get("confidence", "unassigned"),
         parameter_diagnostics={
             key: ParameterDiagnostic(**value)
             for key, value in payload.get("parameter_diagnostics", {}).items()
@@ -1551,6 +1854,15 @@ def _export_single_trace_diagnostic(
     axes[0].plot(field, raw_signal, color="#94a3b8", linewidth=1.0, label="Raw")
     axes[0].plot(field, processed_signal, color="#2563eb", linewidth=1.2, label="Processed")
     axes[0].plot(field, fitted_signal, color="#dc2626", linewidth=1.2, linestyle="--", label="Fit")
+    if fit.get("background_signal") is not None:
+        axes[0].plot(
+            field,
+            np.asarray(fit["background_signal"], dtype=float),
+            color="#64748b",
+            linewidth=1.0,
+            linestyle=":",
+            label="Background",
+        )
     for window in fit.get("candidate_windows", []):
         axes[0].axvspan(
             float(window["start_field_mT"]),
@@ -1558,7 +1870,12 @@ def _export_single_trace_diagnostic(
             color="#f59e0b",
             alpha=0.08,
         )
-    component_colors = {"single_unassigned": "#7c3aed", "mode_1": "#047857", "mode_2": "#b91c1c"}
+    component_colors = {
+        "single_unassigned": "#7c3aed",
+        "mode_1": "#047857",
+        "mode_2": "#b91c1c",
+        "mode_3": "#c2410c",
+    }
     for component in fit.get("selected_components", []):
         axes[0].plot(
             field,
@@ -1621,6 +1938,7 @@ def _export_single_trace_diagnostic(
     warnings = fit.get("warnings", [])
     text_lines = [
         f"selected_mode = {fit.get('selected_mode')}",
+        f"n_peaks = {fit.get('n_peaks_selected')}",
         f"reason = {fit.get('selection_reason')}",
         f"accepted = {fit.get('accepted')}",
         f"trace_reject = {fit.get('rejection_reason') or 'none'}",

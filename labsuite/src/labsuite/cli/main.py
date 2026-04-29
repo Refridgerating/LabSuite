@@ -24,14 +24,18 @@ from labsuite.core.sample_registry import (
     RegistryWorkflowOptions,
     VolumeMetadata,
     add_sample,
+    archive_sample_ledger_records,
     empty_measurement_ledger,
+    empty_processed_ledger,
     empty_registry,
     find_sample,
     load_measurement_ledger,
+    load_processed_ledger,
     load_registry,
     resolve_sample_magnetic_volume,
     sample_to_dict,
     save_measurement_ledger,
+    save_processed_ledger,
     save_registry,
     update_sample_magnetic_volume_fields,
     upsert_measurement_record,
@@ -167,6 +171,8 @@ def _add_modality_subcommands(parser: argparse.ArgumentParser, spec: ModalityCli
         _add_resonance_metrics_arguments(single_parser)
     if spec.name == "fmr":
         _add_fmr_field_polarity_arguments(single_parser)
+    if spec.name == "vsm":
+        _add_vsm_quality_arguments(single_parser)
 
     batch_parser = subparsers.add_parser(
         "batch", help=f"Run {spec.name.upper()} analyses in batch."
@@ -183,6 +189,8 @@ def _add_modality_subcommands(parser: argparse.ArgumentParser, spec: ModalityCli
         _add_resonance_metrics_arguments(batch_parser)
     if spec.name == "fmr":
         _add_fmr_field_polarity_arguments(batch_parser)
+    if spec.name == "vsm":
+        _add_vsm_quality_arguments(batch_parser)
 
     config_parser = subparsers.add_parser(
         "config", help=f"Print or write the default {spec.name.upper()} recipe."
@@ -214,7 +222,11 @@ def _add_shared_fit_arguments(parser: argparse.ArgumentParser) -> None:
 def _add_registry_analysis_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--sample-id", default=None)
     parser.add_argument("--measurement-id", default=None)
-    parser.add_argument("--geometry", choices=("ip", "oop", "angular", "unknown"), default=None)
+    parser.add_argument(
+        "--geometry",
+        choices=("ip", "oop", "IP", "OOP", "angular", "unknown"),
+        default=None,
+    )
     parser.add_argument("--branch-labels", default="")
     parser.add_argument("--sample-registry", type=Path, default=DEFAULT_SAMPLE_REGISTRY_FILE)
     parser.add_argument("--measurement-ledger", type=Path, default=DEFAULT_MEASUREMENT_LEDGER_FILE)
@@ -227,9 +239,34 @@ def _add_registry_analysis_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--raw-import-root", type=Path, default=DEFAULT_RAW_IMPORT_ROOT)
     parser.add_argument("--instrument", default=None)
     parser.add_argument("--notes", default=None)
-    parser.add_argument("--g-mode", choices=("fixed", "float", "bounded"), default=None)
-    parser.add_argument("--g-value", type=float, default=None)
+    parser.add_argument(
+        "--g-mode",
+        choices=("fixed", "float", "bounded"),
+        default=None,
+        help=(
+            "FMR/ESR g handling for this run: fixed locks --g-value, "
+            "float fits g, bounded fits near --g-value."
+        ),
+    )
+    parser.add_argument(
+        "--g-value",
+        type=float,
+        default=None,
+        help="g-factor used by --g-mode fixed or bounded, for example 2.10.",
+    )
     parser.add_argument("--interactive", action="store_true")
+
+
+def _add_vsm_quality_arguments(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--vsm-quality-model", choices=("simple", "legacy"), default=None)
+    parser.add_argument("--vsm-min-weight", type=float, default=None)
+    parser.add_argument(
+        "--vsm-accept-downweighted",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+    )
+    parser.add_argument("--vsm-diagnostics-out", type=Path, default=None)
+    parser.add_argument("--vsm-hcut-fractions", default=None)
 
 
 def _add_sample_subcommands(parser: argparse.ArgumentParser) -> None:
@@ -301,6 +338,23 @@ def _add_sample_subcommands(parser: argparse.ArgumentParser) -> None:
     register_parser.add_argument("--notes", default=None)
     register_parser.add_argument("--interactive", action="store_true")
     _add_sample_metadata_paths(register_parser, include_processed=False)
+
+    prune_parser = subparsers.add_parser(
+        "prune-ledger",
+        help="Archive measurement and processed ledger records for one sample.",
+    )
+    prune_parser.add_argument("sample_id")
+    _add_sample_metadata_paths(prune_parser)
+    prune_parser.add_argument(
+        "--apply",
+        action="store_true",
+        help="Write archived statuses to the ledgers. Without this flag, only report changes.",
+    )
+    prune_parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Report matching records without modifying ledgers. This is the default.",
+    )
 
     validate_parser = subparsers.add_parser("validate", help="Validate the sample registry.")
     _add_sample_registry_path(validate_parser)
@@ -395,6 +449,51 @@ def _add_resonance_metrics_arguments(parser: argparse.ArgumentParser) -> None:
 
 
 def _add_fmr_field_polarity_arguments(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--n-peaks", choices=("auto", "1", "2", "3"), default=None)
+    parser.add_argument("--min-peak-separation-mT", type=float, default=None)
+    parser.add_argument("--min-linewidth-mT", type=float, default=None)
+    parser.add_argument("--max-linewidth-mT", type=float, default=None)
+    parser.add_argument("--background-model", choices=("linear", "quadratic"), default=None)
+    parser.add_argument("--multi-peak-selection", choices=("aic", "bic", "residual"), default=None)
+    parser.add_argument("--enable-branch-tracking", action="store_true")
+    parser.add_argument("--plot-component-fits", action="store_true")
+    parser.add_argument(
+        "--field-polarity", choices=("positive", "negative", "unknown"), default=None
+    )
+    parser.add_argument("--replicate-id", default=None)
+    parser.add_argument("--frequency-match-tolerance-GHz", type=float, default=None)
+    parser.add_argument("--allow-low-confidence-pos-neg-matching", action="store_true")
+    parser.add_argument("--prefer-pos-neg-matched-average", action="store_true")
+    parser.add_argument("--joint-pos-neg-matched-fit", action="store_true")
+    parser.add_argument("--fit-field-offset", action="store_true")
+    parser.add_argument(
+        "--branch-lock-g",
+        action="append",
+        default=[],
+        help="Lock one FMR branch g-factor, e.g. branch_1:2.09. Repeat for branch_2.",
+    )
+    parser.add_argument(
+        "--branch-lock-gamma-over-2pi",
+        action="append",
+        default=[],
+        help="Lock one FMR branch gamma/2pi in GHz/T, e.g. branch_1:29.25.",
+    )
+    parser.add_argument(
+        "--fit-g",
+        action="store_true",
+        help=(
+            "Float g in branch-level Kittel fits. For MTJs usually combine with "
+            "--n-peaks 2 and --enable-branch-tracking."
+        ),
+    )
+    parser.add_argument(
+        "--fit-g-diagnostic",
+        action="store_true",
+        help="Run floating-g diagnostic fits even when a locked g/gamma is supplied.",
+    )
+    parser.add_argument("--compare-locked-vs-floating-g", action="store_true")
+    parser.add_argument("--branch-lock-Hk-mT", action="append", default=[])
+    parser.add_argument("--fit-Hk", action="store_true")
     parser.add_argument(
         "--field-polarity-correction",
         choices=("none", "gonzalez-fuentes"),
@@ -465,6 +564,8 @@ def _run_sample_command(args: argparse.Namespace) -> int:
         return _run_sample_show(registry_path, args.sample_id)
     if args.sample_verb == "register-file":
         return _run_sample_register_file(args, registry_path)
+    if args.sample_verb == "prune-ledger":
+        return _run_sample_prune_ledger(args)
     if args.sample_verb == "validate":
         return _run_sample_validate(registry_path)
     if args.sample_verb == "readiness":
@@ -623,6 +724,41 @@ def _run_sample_register_file(args: argparse.Namespace, registry_path: Path) -> 
         f"Registered {measurement.raw_path} as {measurement.measurement_id} "
         f"for {measurement.sample_id}"
     )
+    return 0
+
+
+def _run_sample_prune_ledger(args: argparse.Namespace) -> int:
+    if args.apply and args.dry_run:
+        raise WorkflowError("sample prune-ledger accepts either --apply or --dry-run, not both.")
+    measurement_ledger_path = args.measurement_ledger.resolve()
+    processed_ledger_path = args.processed_ledger.resolve()
+    measurement_ledger = (
+        load_measurement_ledger(measurement_ledger_path)
+        if measurement_ledger_path.exists()
+        else empty_measurement_ledger()
+    )
+    processed_ledger = (
+        load_processed_ledger(processed_ledger_path)
+        if processed_ledger_path.exists()
+        else empty_processed_ledger()
+    )
+    dry_run = not bool(args.apply)
+    summary = archive_sample_ledger_records(
+        args.sample_id,
+        measurement_ledger,
+        processed_ledger,
+        dry_run=dry_run,
+    )
+    if not dry_run:
+        save_measurement_ledger(measurement_ledger, measurement_ledger_path)
+        save_processed_ledger(processed_ledger, processed_ledger_path)
+    mode = "DRY-RUN" if dry_run else "APPLIED"
+    print(f"{mode} prune-ledger for sample {summary.sample_id}")
+    print(f"Archived measurements: {summary.archived_measurements}")
+    print(f"Archived processed results: {summary.archived_processed_results}")
+    print(f"Archived canonical results: {summary.archived_canonical_results}")
+    print(f"Untouched measurements: {summary.untouched_measurements}")
+    print(f"Untouched processed results: {summary.untouched_processed_results}")
     return 0
 
 
@@ -964,6 +1100,12 @@ def _run_modality_single(spec: ModalityCliSpec, args: argparse.Namespace) -> int
     import_result = _maybe_import_raw_source(original_source_file, spec.name, args)
     source_file = import_result.imported_path
     _maybe_interactive_register_analysis_file(args, spec.name, source_file)
+    if (
+        bool(getattr(args, "update_ledger", False))
+        and getattr(args, "sample_id", None)
+        and not getattr(args, "measurement_id", None)
+    ):
+        args.measurement_id = f"{spec.name}:{args.sample_id}:{source_file.stem}"
     resolved_output_dir = (
         args.output_dir.resolve() if args.output_dir else DEFAULT_OUTPUT_ROOT / source_file.stem
     )
@@ -1153,6 +1295,12 @@ def _workflow_options(
     modality: str, args: argparse.Namespace, *, batch: bool = False
 ) -> dict[str, object]:
     options: dict[str, object] = {"registry_options": _build_registry_workflow_options(args)}
+    if modality == "vsm":
+        options["vsm_recipe_overrides"] = _build_vsm_recipe_overrides(args)
+        diagnostics_out = getattr(args, "vsm_diagnostics_out", None)
+        if diagnostics_out is not None:
+            options["vsm_diagnostics_out"] = diagnostics_out.resolve()
+        return options
     if modality not in {"esr", "fmr"}:
         return options
     options["resonance_metrics_config"] = _build_resonance_metrics_config(args)
@@ -1165,8 +1313,50 @@ def _workflow_options(
     return options
 
 
+def _build_vsm_recipe_overrides(args: argparse.Namespace) -> dict[str, object]:
+    overrides: dict[str, object] = {}
+    quality_model = getattr(args, "vsm_quality_model", None)
+    if quality_model is not None:
+        overrides["vsm_quality_model"] = quality_model
+    min_weight = getattr(args, "vsm_min_weight", None)
+    if min_weight is not None:
+        overrides["vsm_min_weight"] = min_weight
+    accept_downweighted = getattr(args, "vsm_accept_downweighted", None)
+    if accept_downweighted is not None:
+        overrides["vsm_accept_downweighted"] = accept_downweighted
+    hcut_fractions = getattr(args, "vsm_hcut_fractions", None)
+    if hcut_fractions:
+        overrides["vsm_hcut_fractions"] = parse_vsm_hcut_fractions(hcut_fractions)
+    return overrides
+
+
+def parse_vsm_hcut_fractions(raw_value: str) -> list[float]:
+    return [float(part.strip()) for part in raw_value.split(",") if part.strip()]
+
+
 def _build_fmr_recipe_overrides(args: argparse.Namespace) -> dict[str, object]:
     names = [
+        "n_peaks",
+        "min_peak_separation_mT",
+        "min_linewidth_mT",
+        "max_linewidth_mT",
+        "background_model",
+        "multi_peak_selection",
+        "enable_branch_tracking",
+        "plot_component_fits",
+        "field_polarity",
+        "geometry",
+        "replicate_id",
+        "measurement_id",
+        "frequency_match_tolerance_GHz",
+        "allow_low_confidence_pos_neg_matching",
+        "prefer_pos_neg_matched_average",
+        "joint_pos_neg_matched_fit",
+        "fit_field_offset",
+        "fit_g",
+        "fit_g_diagnostic",
+        "compare_locked_vs_floating_g",
+        "fit_Hk",
         "field_polarity_correction",
         "pair_field_polarities",
         "fit_field",
@@ -1187,11 +1377,35 @@ def _build_fmr_recipe_overrides(args: argparse.Namespace) -> dict[str, object]:
         if value is None:
             continue
         if (
-            name in {"pair_field_polarities", "compare_polarity_fits", "plot_polarity_diagnostics"}
+            name
+            in {
+                "pair_field_polarities",
+                "compare_polarity_fits",
+                "plot_polarity_diagnostics",
+                "enable_branch_tracking",
+                "plot_component_fits",
+                "allow_low_confidence_pos_neg_matching",
+                "prefer_pos_neg_matched_average",
+                "joint_pos_neg_matched_fit",
+                "fit_field_offset",
+                "fit_g",
+                "fit_g_diagnostic",
+                "compare_locked_vs_floating_g",
+                "fit_Hk",
+            }
             and not value
         ):
             continue
         overrides[name] = value
+    branch_g = getattr(args, "branch_lock_g", None)
+    if branch_g:
+        overrides["branch_locked_g"] = branch_g
+    branch_gamma = getattr(args, "branch_lock_gamma_over_2pi", None)
+    if branch_gamma:
+        overrides["branch_locked_gamma_over_2pi_GHz_per_T"] = branch_gamma
+    branch_hk = getattr(args, "branch_lock_Hk_mT", None)
+    if branch_hk:
+        overrides["branch_locked_Hk_mT"] = branch_hk
     return overrides
 
 
@@ -1199,6 +1413,9 @@ def _build_registry_workflow_options(args: argparse.Namespace) -> RegistryWorkfl
     branch_labels = getattr(args, "branch_labels", "")
     if isinstance(branch_labels, str):
         branch_labels = [part.strip() for part in branch_labels.split(",") if part.strip()]
+    geometry = getattr(args, "geometry", None)
+    if isinstance(geometry, str):
+        geometry = geometry.lower()
     return RegistryWorkflowOptions(
         sample_registry_path=getattr(
             args, "sample_registry", DEFAULT_SAMPLE_REGISTRY_FILE
@@ -1211,7 +1428,7 @@ def _build_registry_workflow_options(args: argparse.Namespace) -> RegistryWorkfl
         ).resolve(),
         sample_id=getattr(args, "sample_id", None),
         measurement_id=getattr(args, "measurement_id", None),
-        geometry=getattr(args, "geometry", None),
+        geometry=geometry,
         branch_labels=list(branch_labels),
         instrument=getattr(args, "instrument", None),
         notes=getattr(args, "notes", None),
@@ -1447,6 +1664,8 @@ def _print_single_result(modality: str, analysis, artifacts: WorkflowArtifacts) 
             "Background: "
             f"mode={summary.get('background_mode')}  "
             f"accepted={summary.get('background_correction_accepted')}  "
+            f"quality={summary.get('vsm_quality_status')}  "
+            f"weight={summary.get('vsm_quality_weight')}  "
             f"slope={summary.get('background_slope_emu_per_mT')} emu/mT, "
             f"intercept={summary.get('background_intercept_emu')} emu, "
             f"center_applied={summary.get('centering_applied')}"
@@ -1473,6 +1692,8 @@ def _print_batch_result(batch_result: BatchRunResult) -> None:
         print(f"Unresolved files: {batch_result.unresolved_csv_path}")
     if batch_result.raw_import_map_path is not None:
         print(f"Raw import map: {batch_result.raw_import_map_path}")
+    for name, path in sorted(batch_result.extra_artifact_paths.items()):
+        print(f"Batch artifact [{name}]: {path}")
     for name, path in sorted(batch_result.batch_figure_paths.items()):
         print(f"Batch figure [{name}]: {path}")
 

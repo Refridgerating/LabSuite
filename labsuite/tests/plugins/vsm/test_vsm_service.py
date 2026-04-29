@@ -303,11 +303,16 @@ def test_analyze_vsm_file_background_mode_rejected_for_bad_tail_fit(
 
     result = analyze_vsm_file(source_file, recipe_path)
 
-    assert result.summary_metrics["background_mode"] == "rejected"
-    assert result.summary_metrics["background_correction_accepted"] is False
-    assert result.summary_metrics["background_qc_passed"] is False
+    assert result.summary_metrics["background_mode"] == "slope_only"
+    assert result.summary_metrics["background_correction_accepted"] is True
+    assert result.summary_metrics["background_qc_passed"] is True
+    assert result.summary_metrics["vsm_quality_status"] == "downweight"
+    assert "unstable_cutoff" in result.summary_metrics["vsm_quality_reasons"]
+    assert result.summary_metrics["legacy_background_mode"] == "rejected"
+    assert result.summary_metrics["legacy_background_qc_passed"] is False
     assert (
-        result.summary_metrics["background_decision_reason"] == "corrected_zero_crossings_increased"
+        result.summary_metrics["legacy_background_decision_reason"]
+        == "corrected_zero_crossings_increased"
     )
     assert (
         result.summary_metrics["corrected_zero_crossing_candidate_count"]
@@ -316,7 +321,7 @@ def test_analyze_vsm_file_background_mode_rejected_for_bad_tail_fit(
     assert np.allclose(
         np.asarray(result.analysis_payload["processed_data"]["selected_moment_emu"], dtype=float),
         np.asarray(
-            result.analysis_payload["processed_data"]["uncorrected_moment_emu"], dtype=float
+            result.analysis_payload["processed_data"]["slope_corrected_moment_emu"], dtype=float
         ),
     )
     assert (
@@ -324,3 +329,32 @@ def test_analyze_vsm_file_background_mode_rejected_for_bad_tail_fit(
         is not None
     )
     assert result.summary_metrics["positive_tail_fit_r_squared_catastrophic"] is False
+
+
+def test_analyze_vsm_file_legacy_quality_model_preserves_hard_rejection(
+    tmp_path, project_root, write_vsm_sample
+) -> None:
+    source_file = write_vsm_sample(
+        tmp_path,
+        sample_stem="SyntheticLegacyRejected-300K-R1_00001",
+        background_slope_emu_per_mT=2.0e-7,
+        positive_tail_curvature_emu=5.0e-5,
+        negative_tail_curvature_emu=-5.0e-5,
+    )
+    recipe_path = project_root / "recipes" / "vsm" / "default.yaml"
+
+    result = analyze_vsm_file(
+        source_file,
+        recipe_path,
+        recipe_overrides={"vsm_quality_model": "legacy"},
+    )
+
+    assert result.summary_metrics["background_mode"] == "rejected"
+    assert result.summary_metrics["background_correction_accepted"] is False
+    assert result.summary_metrics["legacy_background_mode"] == "rejected"
+    assert np.allclose(
+        np.asarray(result.analysis_payload["processed_data"]["selected_moment_emu"], dtype=float),
+        np.asarray(
+            result.analysis_payload["processed_data"]["uncorrected_moment_emu"], dtype=float
+        ),
+    )

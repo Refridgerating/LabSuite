@@ -120,6 +120,7 @@ def _build_result(
                 "primary_Meff_mT": None,
                 "primary_g": None,
                 "primary_alpha_eff": None,
+                "fmr_branches": [],
             },
             "readiness_matrix": matrix,
             "warnings": _dedupe_warnings(manifest.warnings),
@@ -174,6 +175,7 @@ def _build_result(
     selected_ms = vsm_context["selected_ms"]
     primary_kittel = _primary_kittel(kittel_rows)
     primary_damping = _primary_damping(damping_rows)
+    fmr_branches = _build_fmr_branch_summaries(fmr_rows, damping_rows, selected_ms)
     return {
         "summary": {
             "sample_id": manifest.sample_id,
@@ -186,6 +188,7 @@ def _build_result(
             "primary_alpha_eff": None
             if primary_damping is None
             else primary_damping.get("alpha_eff"),
+            "fmr_branches": fmr_branches,
         },
         "readiness_matrix": matrix,
         "warnings": _dedupe_warnings(warnings),
@@ -226,6 +229,76 @@ def _primary_damping(rows: list[dict[str, Any]]) -> dict[str, Any] | None:
         successful,
         key=lambda row: (not bool(row.get("preferred_for_alpha")), str(row.get("branch_label"))),
     )[0]
+
+
+def _build_fmr_branch_summaries(
+    fmr_rows: list[dict[str, Any]],
+    damping_rows: list[dict[str, Any]],
+    selected_ms: dict[str, Any] | None,
+) -> list[dict[str, Any]]:
+    kittel_rows = [
+        row
+        for row in fmr_rows
+        if row.get("fit_kind") == "kittel" and row.get("result_variant") == "canonical"
+    ]
+    branch_keys = {
+        _branch_key(row)
+        for row in [*kittel_rows, *damping_rows]
+        if row.get("branch_label") is not None
+    }
+    branches: list[dict[str, Any]] = []
+    ms = None if selected_ms is None else selected_ms.get("Ms_A_per_m")
+    for key in sorted(branch_keys, key=lambda item: (item[1], item[2], item[0])):
+        measurement_id, geometry, branch_label = key
+        kittel = _find_branch_row(kittel_rows, key)
+        damping = _find_branch_row(damping_rows, key) or _find_branch_row(
+            damping_rows, ("", geometry, branch_label), ignore_measurement=True
+        )
+        branches.append(
+            {
+                "branch_label": branch_label,
+                "geometry": geometry,
+                "measurement_id": measurement_id or None,
+                "Meff_mT": None if kittel is None else kittel.get("Meff_mT"),
+                "Meff_T": None if kittel is None else kittel.get("Meff_T"),
+                "g": None if kittel is None else kittel.get("g"),
+                "gamma_over_2pi_GHz_per_T": None
+                if kittel is None
+                else (
+                    kittel.get("gamma_over_2pi_GHz_per_T")
+                    or kittel.get("gamma_prime_GHz_per_T")
+                ),
+                "alpha_eff": None if damping is None else damping.get("alpha_eff"),
+                "Ms_A_per_m": ms,
+                "kittel_success": bool(kittel is not None and kittel.get("success")),
+                "linewidth_success": bool(damping is not None and damping.get("success")),
+            }
+        )
+    return branches
+
+
+def _branch_key(row: dict[str, Any]) -> tuple[str, str, str]:
+    return (
+        str(row.get("measurement_id") or ""),
+        str(row.get("geometry") or "unknown"),
+        str(row.get("branch_label") or "default"),
+    )
+
+
+def _find_branch_row(
+    rows: list[dict[str, Any]],
+    key: tuple[str, str, str],
+    *,
+    ignore_measurement: bool = False,
+) -> dict[str, Any] | None:
+    for row in rows:
+        row_key = _branch_key(row)
+        if ignore_measurement:
+            if row_key[1:] == key[1:]:
+                return row
+        elif row_key == key:
+            return row
+    return None
 
 
 def _dedupe_warnings(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:

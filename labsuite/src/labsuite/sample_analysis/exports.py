@@ -39,6 +39,7 @@ def write_sample_analysis_outputs(
         "recipe_snapshot": output_dir / "provenance" / "analysis_recipe_snapshot.yaml",
         "processed_manifest": output_dir / "provenance" / "processed_inputs_manifest.json",
         "fmr_table": output_dir / "tables" / "fmr_branch_parameters.csv",
+        "fmr_branch_summary_table": output_dir / "tables" / "fmr_branch_summary.csv",
         "vsm_table": output_dir / "tables" / "vsm_parameters.csv",
         "esr_table": output_dir / "tables" / "esr_parameters.csv",
         "anisotropy_table": output_dir / "tables" / "anisotropy_parameters.csv",
@@ -67,6 +68,7 @@ def write_sample_analysis_outputs(
         json.dumps(manifest.to_dict(), indent=2), encoding="utf-8"
     )
     _write_rows(result["tables"]["fmr_branch_parameters"], paths["fmr_table"])
+    _write_rows(result["summary"].get("fmr_branches", []), paths["fmr_branch_summary_table"])
     _write_rows(result["tables"]["vsm_parameters"], paths["vsm_table"])
     _write_rows(result["tables"]["esr_parameters"], paths["esr_table"])
     _write_rows(result["tables"]["anisotropy_parameters"], paths["anisotropy_table"])
@@ -90,6 +92,7 @@ def _write_summary_csv(result: dict[str, Any], path: Path) -> None:
         "primary_Meff_mT",
         "primary_g",
         "primary_alpha_eff",
+        "fmr_branch_count",
     ]
     row = {
         "sample_id": summary["sample_id"],
@@ -100,6 +103,7 @@ def _write_summary_csv(result: dict[str, Any], path: Path) -> None:
         "primary_Meff_mT": summary.get("primary_Meff_mT"),
         "primary_g": summary.get("primary_g"),
         "primary_alpha_eff": summary.get("primary_alpha_eff"),
+        "fmr_branch_count": len(summary.get("fmr_branches", [])),
     }
     with path.open("w", encoding="utf-8", newline="") as handle:
         writer = csv.DictWriter(handle, fieldnames=fields)
@@ -147,6 +151,17 @@ def _build_report(result: dict[str, Any]) -> str:
         f"- Primary g: `{_format_value(summary.get('primary_g'))}`",
         f"- Primary alpha_eff: `{_format_value(summary.get('primary_alpha_eff'))}`",
     ]
+    if summary.get("fmr_branches"):
+        lines.extend(["", "## FMR Branches", ""])
+        for branch in summary["fmr_branches"]:
+            lines.append(
+                "- "
+                f"`{branch.get('geometry')}:{branch.get('branch_label')}` "
+                f"Meff=`{_format_value(branch.get('Meff_mT'))}` mT, "
+                f"g=`{_format_value(branch.get('g'))}`, "
+                f"Ms=`{_format_value(branch.get('Ms_A_per_m'))}` A/m, "
+                f"alpha_eff=`{_format_value(branch.get('alpha_eff'))}`"
+            )
     if result["warnings"]:
         lines.extend(["", "## Warnings", ""])
         lines.extend(

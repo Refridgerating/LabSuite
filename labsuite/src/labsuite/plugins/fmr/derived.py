@@ -10,6 +10,9 @@ from scipy.optimize import curve_fit
 
 from labsuite.core.exceptions import WorkflowError
 from labsuite.core.recipes import FmrRecipe
+from labsuite.plugins.fmr.branch_tracking import infer_branch_confidence
+from labsuite.plugins.fmr.kittel import fit_kittel_branch, gamma_over_2pi_from_g
+from labsuite.plugins.fmr.linewidth import fit_linewidth_branch
 from labsuite.plugins.fmr.models import (
     FmrModelFitSummary,
     FmrPhysicsCollectionResult,
@@ -17,6 +20,10 @@ from labsuite.plugins.fmr.models import (
     FmrSeriesCollectionResult,
     FmrSeriesResult,
     FmrTraceFitResult,
+)
+from labsuite.plugins.fmr.polarity_matching import (
+    PolarityMatchConfig,
+    match_positive_negative_points,
 )
 
 _HBAR = physical_constants["Planck constant over 2 pi"][0]
@@ -47,12 +54,8 @@ def build_fmr_series(
     sample_name = first.sample_name if first is not None else "unknown"
     angle_deg = first.angle_deg if first is not None else None
     nominal_temperature_K = first.temperature_K if first is not None else None
-    grouped: dict[str, list[tuple[FmrTraceFitResult, object]]] = {
-        "single_unassigned": [],
-        "mode_1": [],
-        "mode_2": [],
-    }
-    mode_counts = {"single": 0, "double": 0, "partial_double": 0}
+    grouped: dict[str, list[tuple[FmrTraceFitResult, object]]] = {}
+    mode_counts = {"single": 0, "double": 0, "triple": 0, "partial_double": 0}
     warnings: list[str] = []
     excluded_trace_ids = [item.trace_id for item in ordered if not item.accepted]
     for item in ordered:
@@ -62,12 +65,28 @@ def build_fmr_series(
             mode_counts["double"] += 1
             if item.partial_component_qc:
                 mode_counts["partial_double"] += 1
+        elif item.selected_mode == "triple":
+            mode_counts["triple"] += 1
         for component in item.selected_components:
-            if component.accepted:
-                grouped.setdefault(component.component_label, []).append((item, component))
+            if not component.accepted:
+                continue
+            if recipe is not None and recipe.enable_branch_tracking:
+                if not component.branch_id or component.confidence in {"low", "unassigned"}:
+                    continue
+                label = component.branch_id
+            else:
+                label = component.branch_id or component.component_label
+            grouped.setdefault(label, []).append((item, component))
     series_by_label: dict[str, FmrSeriesResult] = {}
     for label, entries in grouped.items():
         if not entries:
+            continue
+        if (
+            recipe is not None
+            and recipe.enable_branch_tracking
+            and len(entries) < recipe.kittel_min_points
+        ):
+            warnings.append(f"{label}:branch_skipped_insufficient_points:{len(entries)}")
             continue
         series_by_label[label] = _build_single_series(
             label,
@@ -111,6 +130,13 @@ def fit_fmr_physics(
 ) -> FmrPhysicsCollectionResult:
     physics_by_label: dict[str, FmrPhysicsResult] = {}
     warnings = list(series_collection.warnings)
+    branch_locked_labels = set(recipe.branch_locked_g) | set(
+        recipe.branch_locked_gamma_over_2pi_GHz_per_T
+    )
+    branch_locked_labels |= set(recipe.branch_locked_Hk_mT)
+    produced_labels = set(series_collection.series_by_label)
+    for label in sorted(branch_locked_labels - produced_labels):
+        warnings.append(f"{label}:branch_lock_label_not_found")
     for label, series in series_collection.series_by_label.items():
         physics_by_label[label] = _fit_single_series_physics(
             series,
@@ -176,6 +202,10 @@ def _build_single_series(
         metadata={
             "accepted_component_count": len(ordered),
             "accepted_trace_count": len({trace.trace_id for trace, _component in ordered}),
+            "branch_id": series_label,
+            "branch_confidence": infer_branch_confidence(
+                [component for _trace, component in ordered]
+            ),
             "polarity_points": _raw_polarity_points(
                 series_label,
                 ordered,
@@ -206,29 +236,50 @@ def _fit_single_series_physics(
     linewidth_fit = None
     derived_parameters: dict[str, float | None] = {
         "gamma_GHz_per_T": None,
+        "gamma_over_2pi_GHz_per_T": None,
         "gamma_rad_per_s_T": None,
         "g": None,
         "M_eff_mT": None,
         "M_eff_T": None,
+        "mu0_Meff_T": None,
+        "mu0_Ms_apparent_T": None,
         "alpha": None,
+        "alpha_eff": None,
         "DeltaH0_mT": None,
+        "mu0_deltaH0_T": None,
     }
     if series.frequency_GHz.size >= recipe.kittel_min_points:
-        kittel_fit = _fit_kittel(
+        branch_g = recipe.branch_locked_g.get(series.series_label)
+        branch_gamma = recipe.branch_locked_gamma_over_2pi_GHz_per_T.get(series.series_label)
+        branch_hk = recipe.branch_locked_Hk_mT.get(series.series_label)
+        effective_g_value = branch_g if branch_g is not None else (g_value or 2.0)
+        effective_gamma = branch_gamma
+        if effective_gamma is None and effective_g_value is not None:
+            effective_gamma = gamma_over_2pi_from_g(effective_g_value)
+        kittel_fit = fit_kittel_branch(
             series.frequency_GHz,
             series.resonance_field_mT,
-            g_mode=g_mode,
-            g_value=g_value,
+            model=recipe.physics_model,
+            g_locked=effective_g_value if g_mode == "fixed" or branch_g is not None else None,
+            gamma_locked_GHz_per_T=effective_gamma,
+            fit_g=recipe.fit_g or recipe.fit_g_diagnostic,
+            Hk_locked_mT=branch_hk,
+            fit_Hk=recipe.fit_Hk,
         )
         warnings.extend(kittel_fit.warnings)
         if kittel_fit.success:
-            gamma = kittel_fit.parameters["gamma_GHz_per_T"]
+            gamma = kittel_fit.parameters["gamma_over_2pi_GHz_per_T"]
             gamma_rad = 2.0 * math.pi * gamma * 1e9
             derived_parameters["gamma_GHz_per_T"] = gamma
+            derived_parameters["gamma_over_2pi_GHz_per_T"] = gamma
             derived_parameters["gamma_rad_per_s_T"] = gamma_rad
             derived_parameters["g"] = gamma_rad * _HBAR / _MU_B
             derived_parameters["M_eff_T"] = kittel_fit.parameters["M_eff_T"]
             derived_parameters["M_eff_mT"] = kittel_fit.parameters["M_eff_T"] * 1_000.0
+            derived_parameters["mu0_Meff_T"] = kittel_fit.parameters["mu0_Meff_T"]
+            derived_parameters["mu0_Ms_apparent_T"] = kittel_fit.parameters[
+                "mu0_Ms_apparent_T"
+            ]
         else:
             warnings.append("kittel_fit_failed")
     else:
@@ -236,18 +287,17 @@ def _fit_single_series_physics(
             f"kittel_fit_insufficient_points:{series.frequency_GHz.size}<{recipe.kittel_min_points}"
         )
     if series.frequency_GHz.size >= recipe.linewidth_min_points:
-        linewidth_fit = _fit_linewidth(series.frequency_GHz, series.linewidth_mT)
+        linewidth_fit = fit_linewidth_branch(
+            series.frequency_GHz,
+            series.linewidth_mT,
+            gamma_over_2pi_GHz_per_T=derived_parameters["gamma_over_2pi_GHz_per_T"],
+            min_points=recipe.linewidth_min_high_confidence_points,
+        )
         if linewidth_fit.success:
             derived_parameters["DeltaH0_mT"] = linewidth_fit.parameters["DeltaH0_mT"]
-            if derived_parameters["gamma_rad_per_s_T"] is not None:
-                slope_t_per_hz = linewidth_fit.parameters["slope_mT_per_GHz"] * 1e-12
-                derived_parameters["alpha"] = (
-                    slope_t_per_hz
-                    * float(derived_parameters["gamma_rad_per_s_T"])
-                    / (4.0 * math.pi)
-                )
-            else:
-                warnings.append("alpha_requires_kittel_gamma")
+            derived_parameters["mu0_deltaH0_T"] = linewidth_fit.parameters["mu0_deltaH0_T"]
+            derived_parameters["alpha"] = linewidth_fit.parameters.get("alpha_eff")
+            derived_parameters["alpha_eff"] = linewidth_fit.parameters.get("alpha_eff")
         else:
             warnings.append("linewidth_fit_failed")
     else:
@@ -260,6 +310,7 @@ def _fit_single_series_physics(
         "accepted_component_count": int(series.frequency_GHz.size),
         "g_mode": g_mode,
         "g_value": g_value,
+        "branch_confidence": series.metadata.get("branch_confidence"),
         "anisotropy_K": "deferred",
         "field_polarity_correction": series.metadata.get("field_polarity_correction", {}),
     }
@@ -305,9 +356,13 @@ def _raw_polarity_points(
             {
                 "series_label": series_label,
                 "mode_id": series_label,
+                "branch_id": component.branch_id or series_label,
                 "sample_id": trace.sample_name,
                 "replicate_id": replicate_id,
                 "geometry": geometry,
+                "measurement_id": trace.metadata.get("measurement_id"),
+                "source_file": str(trace.source_file),
+                "confidence": component.confidence,
                 "frequency_GHz": float(trace.frequency_GHz),
                 "field_polarity": field_polarity,
                 "field_polarity_raw": raw_label,
@@ -322,6 +377,9 @@ def _raw_polarity_points(
                 "Hres_avg_mT": None,
                 "Hres_offset_mT": None,
                 "Hres_split_mT": None,
+                "Hres_asymmetry_mT": None,
+                "matched_pair_id": None,
+                "matching_confidence": None,
                 "DeltaH_raw_mT": float(component.DeltaH_mT),
                 "DeltaH_fit_mT": float(component.DeltaH_mT),
                 "fit_field": "Hres",
@@ -399,44 +457,29 @@ def _pair_polarity_points(
     recipe: FmrRecipe,
 ) -> tuple[list[dict[str, object]], list[str]]:
     config = recipe.field_polarity_correction
-    warnings: list[str] = []
-    output: list[dict[str, object]] = []
-    positives = [point for point in raw_points if point.get("field_polarity") == "positive"]
-    negatives = [point for point in raw_points if point.get("field_polarity") == "negative"]
-    used_negative_ids: set[int] = set()
-    pair_index = 0
-    for positive in positives:
-        candidates = [
-            (index, negative)
-            for index, negative in enumerate(negatives)
-            if index not in used_negative_ids
-            and abs(float(positive["frequency_GHz"]) - float(negative["frequency_GHz"]))
-            <= config.max_pair_frequency_tolerance_ghz
-        ]
-        if len(candidates) != 1:
-            status = "ambiguous_pair" if len(candidates) > 1 else "unpaired_positive"
-            output.append(_unpaired_point(positive, status, recipe))
-            warnings.append(f"field_polarity_correction_{status}:{positive.get('component_id')}")
-            continue
-        negative_index, negative = candidates[0]
-        used_negative_ids.add(negative_index)
-        pair_index += 1
-        pair_id = f"{positive.get('series_label')}:{pair_index:03d}"
-        pair_point, pair_warnings = _paired_point(pair_id, positive, negative, recipe)
-        warnings.extend(pair_warnings)
-        output.append(pair_point)
-    for index, negative in enumerate(negatives):
-        if index not in used_negative_ids:
-            output.append(_unpaired_point(negative, "unpaired_negative", recipe))
-            warnings.append(
-                f"field_polarity_correction_unpaired_negative:{negative.get('component_id')}"
-            )
-    for point in raw_points:
-        if point.get("field_polarity") not in {"positive", "negative"}:
-            output.append(_unpaired_point(point, "unknown_polarity", recipe))
-            warnings.append(
-                f"field_polarity_correction_unknown_polarity:{point.get('component_id')}"
-            )
+    output, warnings = match_positive_negative_points(
+        [dict(point) for point in raw_points],
+        config=PolarityMatchConfig(
+            frequency_tolerance_GHz=config.max_pair_frequency_tolerance_ghz,
+            allow_low_confidence=recipe.allow_low_confidence_pos_neg_matching,
+        ),
+    )
+    warnings = [
+        warning.replace("polarity_matching_", "field_polarity_correction_")
+        for warning in warnings
+    ]
+    if config.max_pair_hres_split_mT is not None:
+        for point in output:
+            if (
+                point.get("polarity_pair_status") == "paired"
+                and point.get("Hres_asymmetry_mT") is not None
+                and float(point["Hres_asymmetry_mT"]) > config.max_pair_hres_split_mT
+            ):
+                point["polarity_pair_status"] = "pair_rejected_hres_split"
+                point["Hres_avg_mT"] = None
+                warnings.append(
+                    f"field_polarity_correction_pair_rejected_hres_split:{point.get('matched_pair_id')}"
+                )
     if config.on_unpaired == "fail" and any(
         point.get("polarity_pair_status") != "paired" for point in output
     ):

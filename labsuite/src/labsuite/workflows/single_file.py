@@ -28,6 +28,7 @@ from labsuite.plugins.fmr.service import (
     export_fmr_analysis_csv,
     export_fmr_analysis_figure,
     export_fmr_analysis_json,
+    export_fmr_branch_diagnostics_csv,
     export_fmr_polarity_diagnostics_figure,
     export_fmr_series_csv,
     export_fmr_summary_csv,
@@ -119,6 +120,7 @@ def run_vsm_single_file_workflow(
     output_dir: Path,
     *,
     registry_options: RegistryWorkflowOptions | None = None,
+    vsm_recipe_overrides: dict[str, object] | None = None,
 ) -> tuple[object, WorkflowArtifacts]:
     """Execute the first VSM single-file workflow."""
 
@@ -129,7 +131,10 @@ def run_vsm_single_file_workflow(
         options=registry_options,
     )
     analysis = analyze_vsm_file(
-        source_path=source_path, recipe_path=recipe_path, sample_context=sample_context
+        source_path=source_path,
+        recipe_path=recipe_path,
+        sample_context=sample_context,
+        recipe_overrides=vsm_recipe_overrides,
     )
 
     stem = source_path.stem
@@ -167,6 +172,7 @@ def run_vsm_single_file_workflow(
         recipe_path=recipe_path,
         sample_context=sample_context,
         registry_options=registry_options,
+        extra_config={"vsm_recipe_overrides": vsm_recipe_overrides},
     )
 
     return analysis, artifacts
@@ -205,6 +211,7 @@ def run_fmr_single_file_workflow(
         figure_path=output_dir / f"{stem}_figure.png",
     )
     series_csv_path = output_dir / f"{stem}_series.csv"
+    branch_diagnostics_csv_path = output_dir / f"{stem}_branch_diagnostics.csv"
     polarity_diagnostics_path = output_dir / f"{stem}_polarity_diagnostics.png"
     diagnostics_dir = output_dir / "trace_diagnostics"
     diagnostic_paths = export_fmr_trace_diagnostic_figures(analysis, diagnostics_dir)
@@ -225,6 +232,7 @@ def run_fmr_single_file_workflow(
             "summary_csv_path": str(artifacts.summary_csv_path),
             "figure_path": str(artifacts.figure_path),
             "series_csv_path": str(series_csv_path),
+            "branch_diagnostics_csv_path": str(branch_diagnostics_csv_path),
             "polarity_diagnostics_path": None
             if polarity_plot_path is None
             else str(polarity_plot_path),
@@ -238,6 +246,7 @@ def run_fmr_single_file_workflow(
     export_fmr_analysis_csv(analysis, artifacts.csv_path)
     export_fmr_summary_csv(analysis, artifacts.summary_csv_path)
     export_fmr_series_csv(analysis, series_csv_path)
+    export_fmr_branch_diagnostics_csv(analysis, branch_diagnostics_csv_path)
     export_fmr_analysis_figure(analysis, artifacts.figure_path)
     export_fmr_analysis_json(analysis, artifacts.json_path)
     record_processed_result(

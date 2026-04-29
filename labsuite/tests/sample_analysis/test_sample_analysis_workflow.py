@@ -63,6 +63,57 @@ def test_sample_analysis_loads_only_canonical_processed_results(
     assert manifest.processed_inputs[0].processed_json_path == canonical_json
 
 
+def test_archived_ledgers_are_excluded_from_sample_analysis(
+    tmp_path: Path, project_root: Path
+) -> None:
+    registry_path, measurement_path, processed_path = _metadata_paths(tmp_path)
+    raw = tmp_path / "raw_fmr.log"
+    raw.write_text("raw", encoding="utf-8")
+    processed_json = tmp_path / "processed" / "archived_analysis.json"
+    _write_fmr_processed(
+        processed_json,
+        raw,
+        sample_id="S1",
+        measurement_id="fmr:S1",
+        geometry="ip",
+        meff_mT=700.0,
+    )
+    _write_metadata(
+        registry_path,
+        measurement_path,
+        processed_path,
+        sample=SampleRecord(sample_id="S1"),
+        measurements=[
+            MeasurementRecord("fmr:S1", "S1", "fmr", str(raw), "ip", status="archived"),
+        ],
+        results=[
+            ProcessedResultRecord(
+                "archived",
+                "fmr:S1",
+                "S1",
+                "fmr",
+                str(processed_json),
+                "recipe.yaml",
+                status="canonical",
+                summary={"geometry": "ip"},
+            ),
+        ],
+    )
+
+    result = build_sample_readiness(
+        sample_id="S1",
+        registry_path=registry_path,
+        measurement_ledger_path=measurement_path,
+        processed_ledger_path=processed_path,
+        recipe_path=project_root / "recipes" / "sample_analysis" / "default.yaml",
+    )
+
+    assert result["summary"]["usable_processed_inputs"] == 0
+    assert not any(
+        item["code"] == "MISSING_CANONICAL_PROCESSED_RESULT" for item in result["warnings"]
+    )
+
+
 def test_missing_canonical_warns_without_crash(tmp_path: Path, project_root: Path) -> None:
     registry_path, measurement_path, processed_path = _metadata_paths(tmp_path)
     raw = tmp_path / "raw_fmr.log"
@@ -133,6 +184,76 @@ def test_sample_analysis_does_not_read_raw_or_scan_processed_root(
     )
 
     assert result["summary"]["usable_processed_inputs"] == 1
+
+
+def test_sample_analysis_reports_two_fmr_branches(tmp_path: Path, project_root: Path) -> None:
+    registry_path, measurement_path, processed_path = _metadata_paths(tmp_path)
+    raw = tmp_path / "raw_fmr.log"
+    raw.write_text("raw", encoding="utf-8")
+    processed_json = tmp_path / "processed" / "two_branch_fmr_analysis.json"
+    _write_fmr_processed_branches(
+        processed_json,
+        raw,
+        sample_id="S1",
+        measurement_id="fmr:S1",
+        geometry="ip",
+        branches=[
+            {"label": "branch_1", "meff_mT": 450.0, "g": 2.05, "alpha": 0.008},
+            {"label": "branch_2", "meff_mT": 920.0, "g": 2.17, "alpha": 0.018},
+        ],
+    )
+    vsm_raw = tmp_path / "vsm.dat"
+    vsm_raw.write_text("raw", encoding="utf-8")
+    vsm_json = tmp_path / "processed" / "vsm_analysis.json"
+    _write_vsm_processed(vsm_json, vsm_raw, sample_id="S1", measurement_id="vsm:S1", ms_emu=1e-6)
+    sample = SampleRecord(
+        sample_id="S1",
+        magnetic_volume_m3=1e-18,
+        magnetic_volume_source="manual",
+        magnetic_volume_method="test",
+    )
+    _write_metadata(
+        registry_path,
+        measurement_path,
+        processed_path,
+        sample=sample,
+        measurements=[
+            MeasurementRecord("vsm:S1", "S1", "vsm", str(vsm_raw), "unknown"),
+            MeasurementRecord("fmr:S1", "S1", "fmr", str(raw), "ip"),
+        ],
+        results=[
+            ProcessedResultRecord(
+                "vsm", "vsm:S1", "S1", "vsm", str(vsm_json), "recipe.yaml", status="canonical"
+            ),
+            ProcessedResultRecord(
+                "fmr",
+                "fmr:S1",
+                "S1",
+                "fmr",
+                str(processed_json),
+                "recipe.yaml",
+                status="canonical",
+                summary={"geometry": "ip", "branches": ["branch_1", "branch_2"]},
+            ),
+        ],
+    )
+
+    run = analyze_sample(
+        sample_id="S1",
+        registry_path=registry_path,
+        measurement_ledger_path=measurement_path,
+        processed_ledger_path=processed_path,
+        recipe_path=project_root / "recipes" / "sample_analysis" / "default.yaml",
+        output_dir=tmp_path / "derived" / "S1",
+    )
+
+    branches = run.result["summary"]["fmr_branches"]
+    assert [branch["branch_label"] for branch in branches] == ["branch_1", "branch_2"]
+    assert [branch["Meff_mT"] for branch in branches] == [450.0, 920.0]
+    assert [branch["g"] for branch in branches] == [2.05, 2.17]
+    assert [branch["alpha_eff"] for branch in branches] == [0.008, 0.018]
+    assert all(branch["Ms_A_per_m"] == 1e9 for branch in branches)
+    assert (run.output_dir / "tables" / "fmr_branch_summary.csv").exists()
 
 
 def test_anisotropy_missing_ms_warns(tmp_path: Path, project_root: Path) -> None:
@@ -415,6 +536,71 @@ def _write_fmr_processed(
                             }
                         }
                     },
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+
+
+def _write_fmr_processed_branches(
+    path: Path,
+    raw: Path,
+    *,
+    sample_id: str,
+    measurement_id: str,
+    geometry: str,
+    branches: list[dict[str, float | str]],
+) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    series_by_label = {}
+    physics_by_label = {}
+    for branch in branches:
+        label = str(branch["label"])
+        meff_mT = float(branch["meff_mT"])
+        g_value = float(branch["g"])
+        alpha = float(branch["alpha"])
+        series_by_label[label] = {
+            "frequency_GHz": [6, 8, 10, 12, 14],
+            "resonance_field_mT": [100, 150, 200, 250, 300],
+            "linewidth_mT": [3, 4, 5, 6, 7],
+        }
+        physics_by_label[label] = {
+            "kittel_fit": {
+                "success": True,
+                "parameters": {
+                    "gamma_over_2pi_GHz_per_T": 29.0,
+                    "M_eff_T": meff_mT / 1000.0,
+                },
+                "metrics": {"r_squared": 0.99},
+            },
+            "linewidth_fit": {
+                "success": True,
+                "parameters": {"DeltaH0_mT": 2.0, "slope_mT_per_GHz": 0.2},
+                "metrics": {"r_squared": 0.99, "rmse_mT": 0.1},
+            },
+            "derived_parameters": {
+                "g": g_value,
+                "M_eff_mT": meff_mT,
+                "M_eff_T": meff_mT / 1000.0,
+                "gamma_over_2pi_GHz_per_T": 29.0,
+                "alpha_eff": alpha,
+                "DeltaH0_mT": 2.0,
+            },
+        }
+    path.write_text(
+        json.dumps(
+            {
+                "measurement": {"modality": "fmr", "source_path": str(raw)},
+                "summary_metrics": {
+                    "sample_id": sample_id,
+                    "registry_measurement_id": measurement_id,
+                    "g_mode": "float",
+                    "field_polarity_pair_count": 1,
+                },
+                "analysis_payload": {
+                    "series_collection_result": {"series_by_label": series_by_label},
+                    "physics_collection_result": {"physics_by_label": physics_by_label},
                 },
             }
         ),

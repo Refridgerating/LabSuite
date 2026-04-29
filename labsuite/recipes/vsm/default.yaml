@@ -1,4 +1,21 @@
 name: vsm-default
+vsm_quality_model: simple
+vsm_min_weight: 0.45
+vsm_accept_downweighted: true
+vsm_hcut_fractions:
+  - 0.15
+  - 0.20
+  - 0.25
+  - 0.30
+vsm_quality_slope_downweight_ratio: 0.20
+vsm_quality_slope_extreme_ratio: 2.0
+vsm_quality_symmetry_downweight_error: 0.20
+vsm_quality_symmetry_catastrophic_error: 0.80
+vsm_quality_cutoff_cv_downweight: 0.15
+vsm_quality_cutoff_cv_extreme: 0.60
+vsm_quality_tail_rmse_downweight_ratio: 0.08
+vsm_quality_tail_rmse_extreme_ratio: 0.50
+vsm_quality_near_zero_ms_emu: 1.0e-18
 background_tail_fraction: 0.12
 background_min_points_per_side: 24
 background_tail_fit_min_r_squared: 0.6

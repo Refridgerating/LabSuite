@@ -38,6 +38,7 @@ DEFAULT_PROCESSED_LEDGER_PATH = Path("metadata") / "processed_ledger.yaml"
 MeasurementType = Literal["vsm", "fmr", "esr"]
 MeasurementGeometry = Literal["ip", "oop", "angular", "unknown"]
 GMode = Literal["fixed", "float", "bounded"]
+MeasurementStatus = Literal["active", "archived"]
 ProcessedStatus = Literal["canonical", "superseded", "test", "archived"]
 MagneticVolumeSource = Literal["manual", "estimated", "imported", "unknown"]
 
@@ -166,6 +167,7 @@ class MeasurementRecord:
     branch_labels: list[str] = field(default_factory=list)
     instrument: str | None = None
     notes: str | None = None
+    status: MeasurementStatus = "active"
 
     @property
     def path(self) -> str:
@@ -204,6 +206,20 @@ class MeasurementLedger:
 class ProcessedLedger:
     schema_version: int = PROCESSED_LEDGER_SCHEMA_VERSION
     processed_results: dict[str, ProcessedResultRecord] = field(default_factory=dict)
+
+
+@dataclass(slots=True)
+class LedgerPruneSummary:
+    sample_id: str
+    archived_measurements: int = 0
+    archived_processed_results: int = 0
+    archived_canonical_results: int = 0
+    untouched_measurements: int = 0
+    untouched_processed_results: int = 0
+    dry_run: bool = False
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
 
 
 @dataclass(slots=True)
@@ -549,6 +565,7 @@ def measurement_from_dict(key: str, payload: dict[str, Any]) -> MeasurementRecor
         branch_labels=[str(item) for item in payload.get("branch_labels", [])],
         instrument=_optional_str(payload.get("instrument")),
         notes=_optional_str(payload.get("notes")),
+        status=_parse_measurement_status(payload.get("status", "active")),
     )
 
 
@@ -562,6 +579,7 @@ def measurement_to_dict(measurement: MeasurementRecord) -> dict[str, Any]:
         "branch_labels": list(measurement.branch_labels),
         "instrument": measurement.instrument,
         "notes": measurement.notes,
+        "status": measurement.status,
     }
 
 
@@ -782,9 +800,48 @@ def upsert_measurement_record(
         branch_labels=list(branch_labels or []),
         instrument=instrument,
         notes=notes,
+        status="active",
     )
     ledger.measurements[measurement_id] = record
     return record
+
+
+def archive_sample_ledger_records(
+    sample_id: str,
+    measurement_ledger: MeasurementLedger,
+    processed_ledger: ProcessedLedger,
+    *,
+    dry_run: bool = False,
+) -> LedgerPruneSummary:
+    """Archive all ledger records for a sample without deleting provenance."""
+
+    summary = LedgerPruneSummary(sample_id=sample_id, dry_run=dry_run)
+    matching_measurement_ids: set[str] = set()
+    for measurement in measurement_ledger.measurements.values():
+        if measurement.sample_id != sample_id:
+            summary.untouched_measurements += 1
+            continue
+        matching_measurement_ids.add(measurement.measurement_id)
+        if measurement.status == "archived":
+            summary.untouched_measurements += 1
+            continue
+        summary.archived_measurements += 1
+        if not dry_run:
+            measurement.status = "archived"
+
+    for result in processed_ledger.processed_results.values():
+        if result.sample_id != sample_id and result.measurement_id not in matching_measurement_ids:
+            summary.untouched_processed_results += 1
+            continue
+        if result.status == "archived":
+            summary.untouched_processed_results += 1
+            continue
+        summary.archived_processed_results += 1
+        if result.status == "canonical":
+            summary.archived_canonical_results += 1
+        if not dry_run:
+            result.status = "archived"
+    return summary
 
 
 def add_processed_result_record(
@@ -1341,6 +1398,13 @@ def _parse_g_mode(value: Any) -> GMode:
     text = str(value or "float").lower()
     if text not in {"fixed", "float", "bounded"}:
         raise MetadataSchemaError(f"g_mode must be one of fixed, float, bounded: {value!r}")
+    return text  # type: ignore[return-value]
+
+
+def _parse_measurement_status(value: Any) -> MeasurementStatus:
+    text = str(value or "active").lower()
+    if text not in {"active", "archived"}:
+        raise MetadataSchemaError(f"Measurement status must be active or archived: {value!r}")
     return text  # type: ignore[return-value]
 
 

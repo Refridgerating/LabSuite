@@ -47,3 +47,25 @@ class CenteringResult:
     field_offset_mT: float
     moment_offset_emu: float
     applied: bool
+
+
+@dataclass(slots=True)
+class VSMSubtractionQuality:
+    """Transparent quality summary for one evaluated VSM background subtraction."""
+
+    method: str
+    hcut_fraction: float | None
+    ms_emu: float | None
+    background_slope: float | None
+    residual_slope_pos: float | None
+    residual_slope_neg: float | None
+    tail_rmse: float | None
+    symmetry_error: float | None
+    cutoff_cv: float | None
+    slope_score: float
+    symmetry_score: float
+    stability_score: float
+    rmse_score: float
+    weight: float
+    status: str
+    reasons: list[str] = field(default_factory=list)

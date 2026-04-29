@@ -11,6 +11,7 @@ from labsuite.core.measurement_models import FitResult
 from labsuite.core.recipes import VsmPreprocessingRecipe
 from labsuite.plugins.vsm.derived import summarize_loop_quality
 from labsuite.plugins.vsm.models import BranchSegment, VsmDataset
+from labsuite.plugins.vsm.quality import evaluate_vsm_subtraction_quality, quality_to_dict
 
 
 def apply_vsm_preprocessing(
@@ -190,7 +191,64 @@ def fit_background_slope(
         temperature_k=temperature_k,
         tail_selection_metadata=selection_details["tail_window_metadata"],
     )
-    background_mode = str(evaluation["background_mode"])
+    legacy_background_mode = str(evaluation["background_mode"])
+    quality = evaluate_vsm_subtraction_quality(
+        field_mT=field_mT,
+        raw_moment_emu=uncorrected_moment,
+        corrected_moment_emu=slope_corrected_moment,
+        positive_tail_indices=positive_indices,
+        negative_tail_indices=negative_indices,
+        positive_fit=positive_fit,
+        negative_fit=negative_fit,
+        corrected_metrics=evaluation["corrected_candidate_metrics"],
+        background_slope=applied_slope,
+        recipe=recipe,
+        method="slope_only",
+        hcut_fraction=recipe.background_tail_fraction,
+    )
+    quality_payload = quality_to_dict(quality)
+    meaningful_correction = bool(
+        evaluation.get("decision_checks", {}).get("meaningful_slope", False)
+    )
+    if recipe.vsm_quality_model == "legacy":
+        background_mode = legacy_background_mode
+        decision_reason = str(evaluation["decision_reason"])
+        correction_accepted = bool(evaluation["correction_accepted"])
+        qc_passed = bool(evaluation["qc_passed"])
+    elif not meaningful_correction:
+        background_mode = "none"
+        decision_reason = "slope_below_meaningful_threshold"
+        correction_accepted = False
+        qc_passed = True
+    elif quality.status in {"accept", "downweight"}:
+        background_mode = "slope_only"
+        decision_reason = f"vsm_quality_{quality.status}"
+        correction_accepted = True
+        qc_passed = True
+    else:
+        background_mode = "rejected"
+        decision_reason = quality.reasons[0] if quality.reasons else "vsm_quality_rejected"
+        correction_accepted = False
+        qc_passed = False
+
+    evaluation.update(
+        {
+            "quality_model": recipe.vsm_quality_model,
+            "quality": quality_payload,
+            "quality_status": quality.status,
+            "quality_weight": quality.weight,
+            "quality_reasons": list(quality.reasons),
+            "legacy_background_mode": legacy_background_mode,
+            "legacy_correction_accepted": bool(evaluation["correction_accepted"]),
+            "legacy_decision_reason": evaluation["decision_reason"],
+            "legacy_qc_passed": bool(evaluation["qc_passed"]),
+            "background_mode": background_mode,
+            "correction_accepted": correction_accepted,
+            "decision_reason": decision_reason,
+            "passed": qc_passed,
+            "qc_passed": qc_passed,
+        }
+    )
     final_moment = (
         np.asarray(slope_corrected_moment, dtype=float)
         if background_mode == "slope_only"
@@ -222,10 +280,19 @@ def fit_background_slope(
             "background_mode": background_mode,
             "subtraction_mode": background_mode,
             "used_intercept_in_correction": False,
-            "correction_accepted": bool(evaluation["correction_accepted"]),
-            "decision_reason": evaluation["decision_reason"],
+            "correction_accepted": correction_accepted,
+            "decision_reason": decision_reason,
             "decision_checks": evaluation["decision_checks"],
-            "qc_passed": bool(evaluation["qc_passed"]),
+            "qc_passed": qc_passed,
+            "quality": quality_payload,
+            "quality_model": recipe.vsm_quality_model,
+            "quality_status": quality.status,
+            "quality_weight": quality.weight,
+            "quality_reasons": list(quality.reasons),
+            "legacy_background_mode": legacy_background_mode,
+            "legacy_correction_accepted": bool(evaluation["legacy_correction_accepted"]),
+            "legacy_decision_reason": evaluation["legacy_decision_reason"],
+            "legacy_qc_passed": bool(evaluation["legacy_qc_passed"]),
             "qc": evaluation,
         },
     }
@@ -240,7 +307,17 @@ def fit_background_slope(
         "negative_tail_mask": negative_tail_mask,
         "combined_tail_mask": combined_tail_mask,
     }
-    return background_fit, loop_variants, tail_masks, [*selection_warnings, *qc_warnings]
+    effective_qc_warnings = list(qc_warnings)
+    if recipe.vsm_quality_model == "simple" and background_mode != legacy_background_mode:
+        effective_qc_warnings = [
+            f"legacy_{warning}" if warning.startswith("background_fit_rejected_") else warning
+            for warning in effective_qc_warnings
+        ]
+        if quality.status == "downweight":
+            effective_qc_warnings.append("vsm_quality_downweighted")
+        elif quality.status == "reject":
+            effective_qc_warnings.append("vsm_quality_rejected")
+    return background_fit, loop_variants, tail_masks, [*selection_warnings, *effective_qc_warnings]
 
 
 def select_tail_indices(

@@ -2,6 +2,7 @@
 data/**
 !data/**/
 !data/**/.gitkeep
+!data/**/README.md
 
 .venv/
 

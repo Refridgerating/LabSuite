@@ -69,6 +69,15 @@ def test_vsm_single_exports_all_artifacts(tmp_path, project_root, vsm_sample_fil
         payload["summary_metrics"]["background_subtraction_mode"]
         == payload["summary_metrics"]["background_mode"]
     )
+    assert payload["summary_metrics"]["vsm_quality_model"] == "simple"
+    assert payload["summary_metrics"]["vsm_quality_status"] in {"accept", "downweight", "reject"}
+    assert payload["summary_metrics"]["vsm_quality_weight"] is not None
+    assert "quality" in payload["analysis_payload"]["background_fit"]["combined_background"]
+    assert payload["summary_metrics"]["legacy_background_mode"] in {
+        "none",
+        "slope_only",
+        "rejected",
+    }
     assert payload["summary_metrics"]["Ms_emu"] is not None
     assert payload["summary_metrics"]["Mr_emu"] is not None
     assert payload["summary_metrics"]["Hc_mT"] is not None
@@ -123,6 +132,10 @@ def test_vsm_single_exports_all_artifacts(tmp_path, project_root, vsm_sample_fil
     assert "background_correction_accepted" in summary_header
     assert "background_decision_reason" in summary_header
     assert "background_qc_passed" in summary_header
+    assert "vsm_quality_status" in summary_header
+    assert "vsm_quality_weight" in summary_header
+    assert "vsm_quality_reasons" in summary_header
+    assert "legacy_background_mode" in summary_header
     assert "background_flatness_gain_score" in summary_header
     assert "background_flatness_gain_balance_score" in summary_header
     assert "background_flatness_gain_balance_ok" in summary_header
@@ -305,3 +318,68 @@ def test_vsm_batch_summary_contains_grouping_metadata(
     assert all(row["Ms_emu"] for row in rows)
     assert all(row["ms_error"] for row in rows)
     assert all(row["saturation_confidence"] for row in rows)
+
+
+def test_vsm_batch_writes_quality_diagnostics_and_weighted_ms(
+    tmp_path, project_root, write_vsm_sample
+) -> None:
+    raw_dir = tmp_path / "raw"
+    write_vsm_sample(
+        raw_dir,
+        sample_stem="Weighted-300K-R1_00001",
+        background_slope_emu_per_mT=2.0e-7,
+        ms_emu=3.5e-5,
+    )
+    write_vsm_sample(
+        raw_dir,
+        sample_stem="Weighted-300K-R2_00001",
+        background_slope_emu_per_mT=2.0e-7,
+        positive_tail_curvature_emu=5.0e-5,
+        negative_tail_curvature_emu=-5.0e-5,
+        ms_emu=3.5e-5,
+    )
+    batch_dir = tmp_path / "weighted_batch"
+    diagnostics_path = tmp_path / "custom_quality.csv"
+
+    exit_code = main(
+        [
+            "vsm",
+            "batch",
+            "--input",
+            str(raw_dir),
+            "--pattern",
+            "Weighted-*.dat",
+            "--recipe",
+            str(project_root / "recipes" / "vsm" / "default.yaml"),
+            "--output-dir",
+            str(batch_dir),
+            "--vsm-diagnostics-out",
+            str(diagnostics_path),
+        ]
+    )
+
+    assert exit_code == 0
+    assert diagnostics_path.exists()
+    assert (batch_dir / "vsm_ms_weighted_summary.csv").exists()
+    assert (batch_dir / "vsm_ms_weighted_summary.json").exists()
+
+    diagnostics = list(csv.DictReader(diagnostics_path.open("r", encoding="utf-8", newline="")))
+    assert len(diagnostics) == 2
+    assert all(row["reasons"] for row in diagnostics)
+    assert all(row["legacy_background_mode"] for row in diagnostics)
+    assert any(row["status"] == "downweight" for row in diagnostics)
+
+    summary_rows = list(
+        csv.DictReader(
+            (batch_dir / "vsm_ms_weighted_summary.csv").open(
+                "r", encoding="utf-8", newline=""
+            )
+        )
+    )
+    assert len(summary_rows) == 1
+    summary = summary_rows[0]
+    assert summary["sample_id"] == "Weighted"
+    assert int(summary["included_count"]) == 2
+    assert int(summary["accepted_count"]) >= 1
+    assert int(summary["downweighted_count"]) >= 1
+    assert float(summary["weighted_mean_ms_emu"]) != float(summary["unweighted_mean_ms_emu"])

@@ -105,11 +105,20 @@ def build_sample_manifest(
         raise WorkflowError(f"Unknown sample_id or alias: {sample_id}")
     measurement_ledger = load_measurement_ledger(resolved_measurement)
     processed_ledger = load_processed_ledger(resolved_processed)
-    canonical = canonical_results_for_sample(processed_ledger, sample.sample_id)
-    measurements_for_sample = {
+    canonical = [
+        result
+        for result in canonical_results_for_sample(processed_ledger, sample.sample_id)
+        if _result_has_active_measurement(result, measurement_ledger)
+    ]
+    all_measurements_for_sample = {
         measurement.measurement_id: measurement
         for measurement in measurement_ledger.measurements.values()
         if measurement.sample_id == sample.sample_id
+    }
+    measurements_for_sample = {
+        measurement.measurement_id: measurement
+        for measurement in all_measurements_for_sample.values()
+        if measurement.status == "active"
     }
     inputs = [
         _input_from_processed_record(
@@ -122,7 +131,12 @@ def build_sample_manifest(
             canonical, key=lambda item: (item.type, item.measurement_id, item.result_id)
         )
     ]
-    warnings = _missing_canonical_warnings(sample.sample_id, measurements_for_sample, inputs)
+    warnings = _missing_canonical_warnings(
+        sample.sample_id,
+        measurements_for_sample,
+        inputs,
+        suppress_empty=bool(all_measurements_for_sample and not measurements_for_sample),
+    )
     return SampleAnalysisManifest(
         registry_path=resolved_registry,
         measurement_ledger_path=resolved_measurement,
@@ -144,6 +158,21 @@ def _input_from_processed_record(
     processed_ledger_path: Path,
 ) -> ProcessedInput:
     measurement = measurement_ledger.measurements.get(result.measurement_id)
+    if measurement is not None and measurement.status == "archived":
+        return ProcessedInput(
+            result_id=result.result_id,
+            measurement_id=result.measurement_id,
+            sample_id=result.sample_id,
+            modality=result.type,
+            geometry=str(result.summary.get("geometry") or "unknown"),
+            branch_labels=[],
+            raw_path=None,
+            status="archived",
+            warning_code=None,
+            message="Archived measurement is ignored by sample analysis.",
+            processed_record=result,
+            measurement_record=measurement,
+        )
     processed_path = _resolve_metadata_path(result.processed_path, processed_ledger_path.parent)
     payload = _read_payload(processed_path)
     geometry = str(
@@ -180,10 +209,20 @@ def _input_from_processed_record(
     return item
 
 
+def _result_has_active_measurement(
+    result: ProcessedResultRecord,
+    measurement_ledger: MeasurementLedger,
+) -> bool:
+    measurement = measurement_ledger.measurements.get(result.measurement_id)
+    return measurement is None or measurement.status == "active"
+
+
 def _missing_canonical_warnings(
     sample_id: str,
     measurements: dict[str, MeasurementRecord],
     inputs: list[ProcessedInput],
+    *,
+    suppress_empty: bool = False,
 ) -> list[dict[str, Any]]:
     warnings: list[dict[str, Any]] = []
     canonical_measurements = {item.measurement_id for item in inputs if item.status == "usable"}
@@ -201,7 +240,7 @@ def _missing_canonical_warnings(
                 ),
             }
         )
-    if not inputs and not measurements:
+    if not inputs and not measurements and not suppress_empty:
         warnings.append(
             {
                 "code": "MISSING_CANONICAL_PROCESSED_RESULT",

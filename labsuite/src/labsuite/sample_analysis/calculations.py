@@ -214,6 +214,7 @@ def derive_damping_parameters(
         rows.append(
             {
                 "sample_id": sample_id,
+                "measurement_id": row.get("measurement_id"),
                 "geometry": geometry,
                 "branch_label": branch,
                 "point_count": row.get("point_count"),
@@ -226,6 +227,7 @@ def derive_damping_parameters(
                 "rmse_mT": row.get("rmse_mT"),
                 "success": row.get("success"),
                 "preferred_for_alpha": geometry == "oop" or (geometry == "ip" and not has_oop),
+                "processed_json_path": row.get("processed_json_path"),
             }
         )
     return rows, warnings
@@ -470,7 +472,20 @@ def _extract_processed_fmr_physics(
                     "frequency_max_GHz": _max_or_none(series.get("frequency_GHz") or []),
                     "success": bool(kittel.get("success")),
                     "gamma_prime_GHz_per_T": _first_number(
-                        physics_derived, names=("gamma_GHz_per_T", "gamma_prime_GHz_per_T")
+                        physics_derived,
+                        names=(
+                            "gamma_over_2pi_GHz_per_T",
+                            "gamma_GHz_per_T",
+                            "gamma_prime_GHz_per_T",
+                        ),
+                    ),
+                    "gamma_over_2pi_GHz_per_T": _first_number(
+                        physics_derived,
+                        names=(
+                            "gamma_over_2pi_GHz_per_T",
+                            "gamma_GHz_per_T",
+                            "gamma_prime_GHz_per_T",
+                        ),
                     ),
                     "g": _first_number(physics_derived, names=("g",)),
                     "Meff_mT": None if meff_t is None else meff_t * 1000.0,
@@ -504,7 +519,7 @@ def _extract_processed_fmr_physics(
                         physics_derived, params, names=("DeltaH0_mT", "intercept_mT")
                     ),
                     "slope_mT_per_GHz": _first_number(params, names=("slope_mT_per_GHz",)),
-                    "alpha_eff": _first_number(physics_derived, names=("alpha",)),
+                    "alpha_eff": _first_number(physics_derived, names=("alpha_eff", "alpha")),
                     "r_squared": metrics.get("r_squared"),
                     "rmse_mT": metrics.get("rmse") or metrics.get("rmse_mT"),
                     "processed_json_path": str(item.processed_json_path),

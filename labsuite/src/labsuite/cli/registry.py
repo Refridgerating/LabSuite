@@ -14,6 +14,7 @@ from labsuite.plugins.esr.serialization import (
     load_esr_analysis_result,
 )
 from labsuite.plugins.fmr.service import build_fmr_report, export_fmr_bundle_from_json
+from labsuite.plugins.vsm.batch import run_vsm_batch_workflow
 from labsuite.plugins.vsm.service import (
     build_vsm_report,
     export_vsm_batch_overlay_figure,
@@ -151,6 +152,7 @@ MODALITY_SPECS: dict[str, ModalityCliSpec] = {
         export_from_json=export_vsm_bundle_from_json,
         build_report=build_vsm_report_entry,
         export_batch_figure=export_vsm_batch_overlay_figure,
+        run_batch_workflow=run_vsm_batch_workflow,
     ),
     "fmr": ModalityCliSpec(
         name="fmr",

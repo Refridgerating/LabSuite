@@ -87,6 +87,9 @@ class FmrComponentFitResult:
     field_mT: FloatArray
     component_signal: FloatArray
     absorption_signal: FloatArray | None = None
+    peak_index: int | None = None
+    branch_id: str | None = None
+    confidence: str = "unassigned"
     parameter_diagnostics: dict[str, ParameterDiagnostic] = field(default_factory=dict)
     bound_hits: dict[str, bool] = field(default_factory=dict)
     accepted: bool = False
@@ -103,10 +106,22 @@ class FmrComponentFitResult:
     metadata: dict[str, Any] = field(default_factory=dict)
     resonance_metrics: ResonanceModeMetrics | None = None
 
+    @property
+    def Hres_mT(self) -> float:
+        """Compatibility alias using the branch-table field name."""
+
+        return self.H_res_mT
+
+    @property
+    def deltaH_mT(self) -> float:
+        """Compatibility alias using the branch-table field name."""
+
+        return self.DeltaH_mT
+
 
 @dataclass(slots=True)
 class FmrTraceModelResult:
-    """One candidate full-trace FMR model fit, single or double resonance."""
+    """One candidate full-trace FMR model fit."""
 
     model_name: str
     success: bool
@@ -121,6 +136,14 @@ class FmrTraceModelResult:
     residual: FloatArray
     components: list[FmrComponentFitResult] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
+    n_peaks: int = 1
+    background_model: str = "linear"
+    fit_aic: float | None = None
+    fit_bic: float | None = None
+    fit_red_chi2: float | None = None
+    residual_rms: float | None = None
+    residual_structure_score: float | None = None
+    background_signal: FloatArray | None = None
 
 
 @dataclass(slots=True)
@@ -152,6 +175,15 @@ class FmrTraceFitResult:
     requested_mode: str = "auto"
     selected_mode: str = "single"
     selection_reason: str = ""
+    n_peaks_selected: int = 1
+    model_selection_method: str = "residual"
+    background_model: str = "linear"
+    fit_aic: float | None = None
+    fit_bic: float | None = None
+    fit_red_chi2: float | None = None
+    residual_rms: float | None = None
+    residual_structure_score: float | None = None
+    background_signal: FloatArray | None = None
     candidate_window_count: int = 0
     double_fit_improvement_ratio: float | None = None
     double_fit_threshold: float | None = None

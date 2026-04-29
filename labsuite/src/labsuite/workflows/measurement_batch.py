@@ -48,6 +48,7 @@ class BatchRunResult:
     unresolved_items: list[BatchItemResult] = field(default_factory=list)
     unresolved_csv_path: Path | None = None
     raw_import_map_path: Path | None = None
+    extra_artifact_paths: dict[str, Path] = field(default_factory=dict)
 
 
 def discover_source_files(
@@ -355,6 +356,7 @@ def write_batch_outputs(
     resonance_metrics_csv_path: Path | None = None,
     unresolved_csv_path: Path | None = None,
     raw_import_map_path: Path | None = None,
+    extra_artifact_paths: dict[str, Path] | None = None,
 ) -> tuple[Path, Path]:
     """Write batch summary and manifest artifacts for a completed run."""
 
@@ -371,6 +373,7 @@ def write_batch_outputs(
         resonance_metrics_csv_path=resonance_metrics_csv_path,
         unresolved_csv_path=unresolved_csv_path,
         raw_import_map_path=raw_import_map_path,
+        extra_artifact_paths=dict(extra_artifact_paths or {}),
         destination=manifest_json_path,
     )
     return summary_csv_path, manifest_json_path
@@ -436,6 +439,7 @@ def _write_batch_manifest_json(
     resonance_metrics_csv_path: Path | None,
     unresolved_csv_path: Path | None,
     raw_import_map_path: Path | None,
+    extra_artifact_paths: dict[str, Path],
     destination: Path,
 ) -> None:
     serialized_batch_figures = {
@@ -458,6 +462,9 @@ def _write_batch_manifest_json(
         else str(resonance_metrics_csv_path),
         "unresolved_files_csv": None if unresolved_csv_path is None else str(unresolved_csv_path),
         "raw_import_map_csv": None if raw_import_map_path is None else str(raw_import_map_path),
+        "extra_artifacts": {
+            name: str(path) for name, path in sorted(extra_artifact_paths.items())
+        },
         "items": [
             {
                 "source_file": str(item.source_path),

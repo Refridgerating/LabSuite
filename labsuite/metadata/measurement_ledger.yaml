@@ -12,6 +12,54 @@ measurements:
     branch_labels: []
     instrument: null
     notes: null
+  ? fmr:MTJ-NoPattern:MTJ(2Ta5Co2NiFe0,5AlOx2NiFe)UnPatterned21APR2026-BroadbandSweep-R4-2Scotch-1000xingain-10xoutgain-500Hz
+    - 20260421-103152__2
+  : measurement_id: fmr:MTJ-NoPattern:MTJ(2Ta5Co2NiFe0,5AlOx2NiFe)UnPatterned21APR2026-BroadbandSweep-R4-2Scotch-1000xingain-10xoutgain-500Hz
+      - 20260421-103152__2
+    sample_id: MTJ-NoPattern
+    type: fmr
+    raw_path: F:\LabAnalysisSuite\labsuite\data\raw\FMR\MTJ(2Ta5Co2NiFe0,5AlOx2NiFe)UnPatterned21APR2026-BroadbandSweep-R4-2Scotch-1000xingain-10xoutgain-500Hz
+      - 20260421-103152__2.log
+    geometry: ip
+    branch_labels: []
+    instrument: null
+    notes: null
+  ? fmr:MTJ-NoPattern:MTJ(2Ta5Co2NiFe0,5AlOx2NiFe)UnPatterned21APR2026-BroadbandSweep-R4-2Scotch-1000xingain-10xoutgain-500Hz
+    - 20260421-103152__4
+  : measurement_id: fmr:MTJ-NoPattern:MTJ(2Ta5Co2NiFe0,5AlOx2NiFe)UnPatterned21APR2026-BroadbandSweep-R4-2Scotch-1000xingain-10xoutgain-500Hz
+      - 20260421-103152__4
+    sample_id: MTJ-NoPattern
+    type: fmr
+    raw_path: F:\LabAnalysisSuite\labsuite\data\raw\FMR\MTJ(2Ta5Co2NiFe0,5AlOx2NiFe)UnPatterned21APR2026-BroadbandSweep-R4-2Scotch-1000xingain-10xoutgain-500Hz
+      - 20260421-103152__4.log
+    geometry: ip
+    branch_labels: []
+    instrument: null
+    notes: null
+  ? fmr:MTJ-NoPattern:MTJ(2Ta5Co2NiFe0,5AlOx2NiFe)UnPatterned21APR2026-BroadbandSweep-R4-2Scotch-1000xingain-10xoutgain-500Hz
+    - 20260421-103152__5
+  : measurement_id: fmr:MTJ-NoPattern:MTJ(2Ta5Co2NiFe0,5AlOx2NiFe)UnPatterned21APR2026-BroadbandSweep-R4-2Scotch-1000xingain-10xoutgain-500Hz
+      - 20260421-103152__5
+    sample_id: MTJ-NoPattern
+    type: fmr
+    raw_path: F:\LabAnalysisSuite\labsuite\data\raw\FMR\MTJ(2Ta5Co2NiFe0,5AlOx2NiFe)UnPatterned21APR2026-BroadbandSweep-R4-2Scotch-1000xingain-10xoutgain-500Hz
+      - 20260421-103152__5.log
+    geometry: ip
+    branch_labels: []
+    instrument: null
+    notes: null
+  ? fmr:MTJ-NoPattern:MTJ(2Ta5Co2NiFe0,5AlOx2NiFe)UnPatterned21APR2026-BroadbandSweep-R4-2Scotch-1000xingain-10xoutgain-500Hz
+    - 20260421-103152__6
+  : measurement_id: fmr:MTJ-NoPattern:MTJ(2Ta5Co2NiFe0,5AlOx2NiFe)UnPatterned21APR2026-BroadbandSweep-R4-2Scotch-1000xingain-10xoutgain-500Hz
+      - 20260421-103152__6
+    sample_id: MTJ-NoPattern
+    type: fmr
+    raw_path: F:\LabAnalysisSuite\labsuite\data\raw\FMR\MTJ(2Ta5Co2NiFe0,5AlOx2NiFe)UnPatterned21APR2026-BroadbandSweep-R4-2Scotch-1000xingain-10xoutgain-500Hz
+      - 20260421-103152__6.log
+    geometry: ip
+    branch_labels: []
+    instrument: null
+    notes: null
   fmr:MTJ-NoPattern:MTJUnPatterned-03APR2026-R1 - 20260403-151747:
     measurement_id: fmr:MTJ-NoPattern:MTJUnPatterned-03APR2026-R1 - 20260403-151747
     sample_id: MTJ-NoPattern

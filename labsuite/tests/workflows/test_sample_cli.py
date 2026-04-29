@@ -6,7 +6,20 @@ import pytest
 
 from labsuite.cli.main import _parse_layer_argument, main
 from labsuite.core.exceptions import WorkflowError
-from labsuite.core.sample_registry import load_measurement_ledger, load_registry
+from labsuite.core.sample_registry import (
+    MeasurementLedger,
+    MeasurementRecord,
+    ProcessedLedger,
+    ProcessedResultRecord,
+    SampleRecord,
+    SampleRegistry,
+    load_measurement_ledger,
+    load_processed_ledger,
+    load_registry,
+    save_measurement_ledger,
+    save_processed_ledger,
+    save_registry,
+)
 
 
 def test_sample_cli_add_list_show_register_validate(tmp_path: Path, capsys) -> None:
@@ -74,6 +87,82 @@ def test_sample_cli_add_list_show_register_validate(tmp_path: Path, capsys) -> N
     assert "SAMPLE-A" in registry.samples
     assert next(iter(ledger.measurements.values())).type == "fmr"
     assert main(["sample", "validate", "--sample-registry", str(registry_path)]) == 0
+
+
+def test_sample_cli_prune_ledger_defaults_to_dry_run_and_apply(tmp_path: Path, capsys) -> None:
+    registry_path = tmp_path / "metadata" / "sample_registry.yaml"
+    measurement_path = tmp_path / "metadata" / "measurement_ledger.yaml"
+    processed_path = tmp_path / "metadata" / "processed_ledger.yaml"
+    raw = tmp_path / "raw.log"
+    raw.write_text("raw", encoding="utf-8")
+    save_registry(SampleRegistry(samples={"S1": SampleRecord(sample_id="S1")}), registry_path)
+    save_measurement_ledger(
+        MeasurementLedger(
+            measurements={
+                "fmr:S1": MeasurementRecord("fmr:S1", "S1", "fmr", str(raw), "ip"),
+            }
+        ),
+        measurement_path,
+    )
+    save_processed_ledger(
+        ProcessedLedger(
+            processed_results={
+                "fmr": ProcessedResultRecord(
+                    "fmr",
+                    "fmr:S1",
+                    "S1",
+                    "fmr",
+                    "processed/fmr.json",
+                    "recipe.yaml",
+                    status="canonical",
+                )
+            }
+        ),
+        processed_path,
+    )
+
+    assert (
+        main(
+            [
+                "sample",
+                "prune-ledger",
+                "S1",
+                "--sample-registry",
+                str(registry_path),
+                "--measurement-ledger",
+                str(measurement_path),
+                "--processed-ledger",
+                str(processed_path),
+            ]
+        )
+        == 0
+    )
+
+    assert "DRY-RUN" in capsys.readouterr().out
+    assert load_measurement_ledger(measurement_path).measurements["fmr:S1"].status == "active"
+    assert load_processed_ledger(processed_path).processed_results["fmr"].status == "canonical"
+
+    assert (
+        main(
+            [
+                "sample",
+                "prune-ledger",
+                "S1",
+                "--sample-registry",
+                str(registry_path),
+                "--measurement-ledger",
+                str(measurement_path),
+                "--processed-ledger",
+                str(processed_path),
+                "--apply",
+            ]
+        )
+        == 0
+    )
+
+    assert "APPLIED" in capsys.readouterr().out
+    assert load_measurement_ledger(measurement_path).measurements["fmr:S1"].status == "archived"
+    assert load_processed_ledger(processed_path).processed_results["fmr"].status == "archived"
 
 
 @pytest.mark.parametrize(

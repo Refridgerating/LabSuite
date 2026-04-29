@@ -17,6 +17,7 @@ from labsuite.core.sample_registry import (
     SampleRegistry,
     VolumeMetadata,
     add_processed_result_record,
+    archive_sample_ledger_records,
     load_measurement_ledger,
     load_processed_ledger,
     load_registry,
@@ -121,6 +122,66 @@ def test_measurement_and_processed_ledgers_round_trip(tmp_path: Path) -> None:
 
     assert load_measurement_ledger(measurement_path).measurements["vsm:S1:raw"].sample_id == "S1"
     assert load_processed_ledger(processed_path).processed_results["result-1"].status == "canonical"
+
+
+def test_archive_sample_ledger_records_dry_run_and_apply() -> None:
+    raw = Path("raw.dat")
+    measurement_ledger = MeasurementLedger()
+    upsert_measurement_record(
+        measurement_ledger,
+        measurement_id="fmr:S1:raw",
+        sample_id="S1",
+        measurement_type="fmr",
+        raw_path=raw,
+    )
+    upsert_measurement_record(
+        measurement_ledger,
+        measurement_id="fmr:S2:raw",
+        sample_id="S2",
+        measurement_type="fmr",
+        raw_path=raw,
+    )
+    processed_ledger = ProcessedLedger(
+        processed_results={
+            "canonical": ProcessedResultRecord(
+                "canonical",
+                "fmr:S1:raw",
+                "S1",
+                "fmr",
+                "processed/s1.json",
+                "recipe.yaml",
+                status="canonical",
+            ),
+            "other": ProcessedResultRecord(
+                "other",
+                "fmr:S2:raw",
+                "S2",
+                "fmr",
+                "processed/s2.json",
+                "recipe.yaml",
+                status="canonical",
+            ),
+        }
+    )
+
+    dry_run = archive_sample_ledger_records(
+        "S1", measurement_ledger, processed_ledger, dry_run=True
+    )
+
+    assert dry_run.archived_measurements == 1
+    assert dry_run.archived_processed_results == 1
+    assert dry_run.archived_canonical_results == 1
+    assert measurement_ledger.measurements["fmr:S1:raw"].status == "active"
+    assert processed_ledger.processed_results["canonical"].status == "canonical"
+
+    applied = archive_sample_ledger_records("S1", measurement_ledger, processed_ledger)
+
+    assert applied.archived_measurements == 1
+    assert applied.archived_processed_results == 1
+    assert measurement_ledger.measurements["fmr:S1:raw"].status == "archived"
+    assert measurement_ledger.measurements["fmr:S2:raw"].status == "active"
+    assert processed_ledger.processed_results["canonical"].status == "archived"
+    assert processed_ledger.processed_results["other"].status == "canonical"
 
 
 def test_missing_magnetic_volume_resolves_unavailable() -> None:

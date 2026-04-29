@@ -683,6 +683,17 @@ def _build_trust_diagnostics(
             "background_subtraction_mode": background_details.get("subtraction_mode"),
             "background_correction_accepted": background_details.get("correction_accepted"),
             "background_decision_reason": background_details.get("decision_reason"),
+            "vsm_quality_model": background_details.get("quality_model"),
+            "vsm_quality_status": background_details.get("quality_status"),
+            "vsm_quality_weight": background_details.get("quality_weight"),
+            "vsm_quality_reasons": background_details.get("quality_reasons"),
+            "legacy_background_mode": background_details.get("legacy_background_mode"),
+            "legacy_background_correction_accepted": background_details.get(
+                "legacy_correction_accepted"
+            ),
+            "legacy_background_decision_reason": background_details.get(
+                "legacy_decision_reason"
+            ),
             "background_slope_mean_emu_per_mT": background_details.get("slope_emu_per_mT"),
             "background_slope_positive_emu_per_mT": background_details.get(
                 "positive_slope_emu_per_mT"

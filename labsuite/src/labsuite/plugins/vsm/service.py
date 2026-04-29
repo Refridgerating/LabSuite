@@ -87,6 +87,24 @@ _SUMMARY_FIELDS = [
     "background_correction_accepted",
     "background_decision_reason",
     "background_qc_passed",
+    "vsm_quality_model",
+    "vsm_quality_status",
+    "vsm_quality_weight",
+    "vsm_quality_reasons",
+    "vsm_quality_hcut_fraction",
+    "vsm_quality_slope_score",
+    "vsm_quality_symmetry_score",
+    "vsm_quality_stability_score",
+    "vsm_quality_rmse_score",
+    "vsm_quality_residual_slope_pos",
+    "vsm_quality_residual_slope_neg",
+    "vsm_quality_tail_rmse",
+    "vsm_quality_symmetry_error",
+    "vsm_quality_cutoff_cv",
+    "legacy_background_mode",
+    "legacy_background_correction_accepted",
+    "legacy_background_decision_reason",
+    "legacy_background_qc_passed",
     "background_score_raw",
     "background_score_corrected",
     "background_score_delta",
@@ -150,11 +168,13 @@ def analyze_vsm_file(
     source_path: Path,
     recipe_path: Path,
     sample_context: AnalysisSampleContext | None = None,
+    recipe_overrides: dict[str, Any] | None = None,
 ) -> MeasurementAnalysisResult:
     """Run the first VSM loop-analysis pipeline."""
 
     dataset = parse_vsm_file(source_path.resolve())
     recipe = load_vsm_recipe(recipe_path)
+    _apply_vsm_recipe_overrides(recipe, recipe_overrides)
     sample_record, filename_warnings = _parse_vsm_filename_metadata(dataset.source_path)
     filename_sample_id = sample_record.sample_id
     if sample_context is not None and sample_context.sample_id:
@@ -313,6 +333,30 @@ def analyze_vsm_file(
         "background_correction_accepted": combined_background["correction_accepted"],
         "background_decision_reason": combined_background["decision_reason"],
         "background_qc_passed": combined_background["qc_passed"],
+        "vsm_quality_model": combined_background["quality_model"],
+        "vsm_quality_status": combined_background["quality_status"],
+        "vsm_quality_weight": combined_background["quality_weight"],
+        "vsm_quality_reasons": combined_background["quality_reasons"],
+        "vsm_quality_hcut_fraction": combined_background["quality"]["hcut_fraction"],
+        "vsm_quality_slope_score": combined_background["quality"]["slope_score"],
+        "vsm_quality_symmetry_score": combined_background["quality"]["symmetry_score"],
+        "vsm_quality_stability_score": combined_background["quality"]["stability_score"],
+        "vsm_quality_rmse_score": combined_background["quality"]["rmse_score"],
+        "vsm_quality_residual_slope_pos": combined_background["quality"][
+            "residual_slope_pos"
+        ],
+        "vsm_quality_residual_slope_neg": combined_background["quality"][
+            "residual_slope_neg"
+        ],
+        "vsm_quality_tail_rmse": combined_background["quality"]["tail_rmse"],
+        "vsm_quality_symmetry_error": combined_background["quality"]["symmetry_error"],
+        "vsm_quality_cutoff_cv": combined_background["quality"]["cutoff_cv"],
+        "legacy_background_mode": combined_background["legacy_background_mode"],
+        "legacy_background_correction_accepted": combined_background[
+            "legacy_correction_accepted"
+        ],
+        "legacy_background_decision_reason": combined_background["legacy_decision_reason"],
+        "legacy_background_qc_passed": combined_background["legacy_qc_passed"],
         "background_score_raw": background_qc["score_raw"],
         "background_score_corrected": background_qc["score_corrected"],
         "background_score_delta": background_qc["score_delta"],
@@ -537,6 +581,20 @@ def export_vsm_analysis_json(result: MeasurementAnalysisResult, destination: Pat
 
     destination.write_text(json.dumps(result.to_dict(), indent=2), encoding="utf-8")
     return destination
+
+
+def _apply_vsm_recipe_overrides(
+    recipe,
+    overrides: dict[str, Any] | None,
+) -> None:
+    if not overrides:
+        return
+    for key, value in overrides.items():
+        if value is None:
+            continue
+        if not hasattr(recipe, key):
+            continue
+        setattr(recipe, key, value)
 
 
 def export_vsm_analysis_csv(
